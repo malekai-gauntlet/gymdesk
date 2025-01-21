@@ -76,7 +76,7 @@ const UpcomingEvents = () => (
 const SupportForm = () => {
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
-  const [priority, setPriority] = useState('normal')
+  const [priority, setPriority] = useState('medium')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { user } = useAuth()
   
@@ -85,26 +85,107 @@ const SupportForm = () => {
     setIsSubmitting(true)
     
     try {
+      console.log('=== Starting Ticket Submission ===')
+      
+      // Check authentication status
+      const { data: { session } } = await supabase.auth.getSession()
+      console.log('Current Session:', {
+        accessToken: session?.access_token ? 'Present' : 'Missing',
+        userId: session?.user?.id,
+        userEmail: session?.user?.email,
+      })
+      
+      // First verify if the user exists in the users table
+      console.log('Checking if user exists in users table...')
+      const { data: userExists, error: userCheckError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', user?.id)
+        .single()
+
+      console.log('User check result:', { userExists, userCheckError })
+      
+      if (userCheckError) {
+        console.error('Error checking user:', userCheckError)
+        throw new Error('Failed to verify user existence')
+      }
+
+      console.log('User from Context:', {
+        id: user?.id,
+        email: user?.email,
+        metadata: user?.user_metadata,
+        role: user?.role,
+        aud: user?.aud
+      })
+
+      if (!user?.id) {
+        console.error('No user ID available!')
+        throw new Error('User ID is required')
+      }
+
+      // Ensure created_by is treated as UUID
+      const created_by = user.id // Don't convert to string, keep as UUID
+      console.log('Created By (UUID):', created_by)
+
       const ticketData = {
         title,
         description: message,
         priority,
-        status: 'new',
-        created_by: user?.id,
-        member_email: user?.email
+        status: 'open',
+        created_by,
+        comments: [],
+        history: []
       }
       
-      const { error } = await sendTicketNotification(ticketData)
-      if (error) throw error
-      
-      toast.success('Support request sent successfully!')
+      console.log('Ticket Data to Insert:', JSON.stringify(ticketData, null, 2))
+
+      // Step 1: Create ticket in database
+      console.log('Attempting database insert...')
+      const { data: ticket, error: dbError } = await supabase
+        .from('tickets')
+        .insert([ticketData])
+        .select()
+        .single()
+
+      if (dbError) {
+        console.error('Database Error Details:', {
+          code: dbError.code,
+          message: dbError.message,
+          details: dbError.details,
+          hint: dbError.hint,
+          status: dbError.status,
+          query: dbError.query,
+          errorType: typeof dbError
+        })
+        throw dbError
+      }
+
+      console.log('Ticket created successfully:', ticket)
+
+      // Step 2: Send email notification
+      console.log('Attempting to send email notification...')
+      const { error: emailError } = await sendTicketNotification({
+        ...ticketData,
+        member_email: user?.email
+      })
+
+      if (emailError) {
+        console.error('Email Error Details:', emailError)
+        toast.success('Ticket created, but notification email failed to send')
+      } else {
+        console.log('Email sent successfully')
+        toast.success('Support request sent successfully!')
+      }
+
+      // Clear form
       setTitle('')
       setMessage('')
-      setPriority('normal')
+      setPriority('medium')
     } catch (error) {
-      console.error('Error:', error)
-      toast.error('Failed to send support request. Please try again.')
+      console.error('Full Error Object:', error)
+      toast.error('Failed to create support request. Please try again.')
     } finally {
+      console.log('=== Submission Process Complete ===')
       setIsSubmitting(false)
     }
   }
@@ -130,7 +211,7 @@ const SupportForm = () => {
             className="w-full rounded-lg border border-gray-600 bg-gray-600/50 px-3 py-2 text-white focus:border-[#e12c4c] focus:ring-[#e12c4c]"
           >
             <option value="low">Low Priority</option>
-            <option value="normal">Normal Priority</option>
+            <option value="medium">Medium Priority</option>
             <option value="high">High Priority</option>
           </select>
         </div>

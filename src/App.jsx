@@ -2,15 +2,17 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider } from './components/auth/AuthContext'
 import { useAuth } from './components/auth/AuthContext'
 import { supabase } from './lib/supabaseClient'
+import { Toaster } from 'react-hot-toast'
 import Login from './components/auth/Login'
 import DashboardLayout from './components/dashboard/DashboardLayout'
 import LandingPage from './components/LandingPage'
+import MemberPortal from './components/member/MemberPortal'
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children, redirectTo = "/" }) {
   const { user } = useAuth()
   
   if (!user) {
-    return <Navigate to="/admin/login" replace />
+    return <Navigate to={redirectTo} replace />
   }
   
   return children
@@ -26,14 +28,20 @@ function App() {
           <Route 
             path="/admin/dashboard" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute redirectTo="/admin/login">
                 <DashboardLayout />
               </ProtectedRoute>
             } 
           />
+          <Route path="/member" element={
+            <ProtectedRoute redirectTo="/">
+              <MemberPortal />
+            </ProtectedRoute>
+          } />
           {/* Member routes will be added later */}
         </Routes>
       </Router>
+      <Toaster position="top-right" />
     </AuthProvider>
   )
 }

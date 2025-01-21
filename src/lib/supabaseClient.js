@@ -22,6 +22,20 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 })
 
+// Function to send ticket notifications
+export const sendTicketNotification = async (ticketData) => {
+  try {
+    const { data, error } = await supabase.functions.invoke('send-ticket-notification', {
+      body: ticketData
+    })
+    if (error) throw error
+    return { data, error: null }
+  } catch (error) {
+    console.error('Error sending ticket notification:', error)
+    return { data: null, error }
+  }
+}
+
 // Also add a default export for flexibility
 export default supabase
 

@@ -18,7 +18,13 @@ export default function Login({ isMemberPortal, isLightTheme }) {
   // Redirect if already logged in
   useEffect(() => {
     if (user) {
-      navigate('/admin/dashboard')
+      // Check user role and redirect accordingly
+      const userRole = user.user_metadata?.role
+      if (userRole === 'member') {
+        navigate('/member')
+      } else {
+        navigate('/admin/dashboard')
+      }
     }
   }, [user, navigate])
 

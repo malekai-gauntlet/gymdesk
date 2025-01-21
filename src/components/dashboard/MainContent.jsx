@@ -41,23 +41,34 @@ export default function MainContent({ view, selectedTicket, onTicketSelect }) {
     }
   }, [])
 
-  async function fetchTickets() {
+  const fetchTickets = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: tickets, error } = await supabase
         .from('tickets')
-        .select('*')
+        .select(`
+          *,
+          member:created_by (
+            email
+          )
+        `)
         .order('created_at', { ascending: false })
 
       if (error) throw error
 
-      setTickets(data)
+      // Transform the data to include member_email
+      const ticketsWithEmail = tickets.map(ticket => ({
+        ...ticket,
+        member_email: ticket.member?.email
+      }))
+
+      setTickets(ticketsWithEmail)
       
       // Update stats
       const stats = {
-        openTickets: data.filter(t => t.status === 'open').length,
-        solved: data.filter(t => t.status === 'closed').length,
-        good: data.filter(t => t.priority === 'low').length,
-        groups: new Set(data.map(t => t.created_by)).size // Unique requesters
+        openTickets: tickets.filter(t => t.status === 'open').length,
+        solved: tickets.filter(t => t.status === 'closed').length,
+        good: tickets.filter(t => t.priority === 'low').length,
+        groups: new Set(tickets.map(t => t.created_by)).size // Unique requesters
       }
       setStats(stats)
     } catch (error) {

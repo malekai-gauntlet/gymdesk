@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { EllipsisVerticalIcon, ArrowLeftIcon } from '@heroicons/react/24/outline'
 import { supabase } from '../../lib/supabaseClient'
 import { toast } from 'react-hot-toast'
+import { sendTicketNotification } from '../../lib/supabaseClient'
 
 export default function TicketDetail({ ticket, onClose }) {
   const [replyText, setReplyText] = useState('')
@@ -26,6 +27,9 @@ export default function TicketDetail({ ticket, onClose }) {
     
     setSending(true)
     try {
+      console.log('=== Starting Reply Submission ===')
+      console.log('Original ticket data:', ticket) // Log the original ticket data
+      
       // Create the new message object
       const newMessage = {
         id: Date.now(),
@@ -34,25 +38,34 @@ export default function TicketDetail({ ticket, onClose }) {
         timestamp: new Date().toISOString()
       }
 
-      // Send the reply via Edge Function
-      const response = await fetch('/api/send-ticket-notification', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: ticket.title,
-          description: ticket.description,
-          priority: ticket.priority,
-          status: ticket.status,
-          created_by: ticket.created_by,
-          member_email: ticket.member_email,
-          type: 'reply',
-          reply_text: replyText
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to send reply')
+      // Prepare ticket data with all required fields
+      const ticketData = {
+        title: ticket.title,
+        description: ticket.description,
+        priority: ticket.priority,
+        status: ticket.status,
+        created_by: ticket.created_by,
+        member_email: ticket.member_email, // Make sure this exists in the ticket prop
+        type: 'reply',
+        reply_text: replyText
       }
+      
+      // Verify all required fields are present
+      console.log('Sending reply with data:', JSON.stringify(ticketData, null, 2))
+      
+      if (!ticketData.member_email) {
+        throw new Error('Member email is missing from the ticket data')
+      }
+
+      // Send the reply via Edge Function
+      const { data, error: emailError } = await sendTicketNotification(ticketData)
+
+      if (emailError) {
+        console.error('Email Error Details:', emailError)
+        throw new Error(emailError.message || 'Failed to send email')
+      }
+
+      console.log('Reply sent successfully:', data)
 
       // Update messages in the UI
       setMessages(prev => [...prev, newMessage])
@@ -64,7 +77,7 @@ export default function TicketDetail({ ticket, onClose }) {
       toast.success('Reply sent successfully')
     } catch (error) {
       console.error('Error sending reply:', error)
-      toast.error('Failed to send reply')
+      toast.error(error.message || 'Failed to send reply')
     } finally {
       setSending(false)
     }

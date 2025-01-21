@@ -53,30 +53,33 @@ export default function Login({ isMemberPortal, isLightTheme }) {
           throw new Error('Failed to get user ID after signup')
         }
 
-        // Get the current session to ensure we're authenticated
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-        if (sessionError) throw sessionError
+        // Step 2: Create user profile
+        const { error: profileError } = await supabase
+          .from('users')
+          .insert([
+            {
+              id: authData.user.id,
+              email: email,
+              first_name: firstName,
+              last_name: lastName,
+              role: isMemberPortal ? 'member' : 'agent'
+            }
+          ])
+          .select()
 
-        if (!session) {
-          throw new Error('No active session after signup')
-        }
-
-        // Step 2: Create user profile with the confirmed session
-        const { error: profileError } = await supabase.from('users').insert([
-          {
-            id: authData.user.id,
-            first_name: firstName,
-            last_name: lastName,
-            role: isMemberPortal ? 'member' : 'agent',
-            created_at: new Date().toISOString()
-          }
-        ])
         if (profileError) {
           console.error('Profile creation error:', profileError)
-          throw new Error('Failed to create user profile. Please contact support.')
+          // If profile creation fails, clean up the auth user
+          await supabase.auth.signOut()
+          throw new Error('Failed to create user profile. Please try again.')
         }
+
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        // Handle sign in
+        const { error } = await supabase.auth.signInWithPassword({ 
+          email, 
+          password 
+        })
         if (error) throw error
       }
     } catch (error) {

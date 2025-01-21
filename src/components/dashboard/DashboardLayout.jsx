@@ -6,6 +6,11 @@ import Header from './Header'
 
 export default function DashboardLayout() {
   const [selectedView, setSelectedView] = useState('dashboard')
+  const [selectedTicket, setSelectedTicket] = useState(null)
+
+  const handleTicketSelect = (ticket) => {
+    setSelectedTicket(ticket)
+  }
 
   return (
     <div className="h-screen flex bg-gray-100">
@@ -13,8 +18,12 @@ export default function DashboardLayout() {
       <div className="flex-1 flex flex-col">
         <Header />
         <div className="flex-1 flex">
-          <TicketUpdates />
-          <MainContent view={selectedView} />
+          <TicketUpdates onTicketSelect={handleTicketSelect} selectedTicketId={selectedTicket?.id} />
+          <MainContent 
+            view={selectedView} 
+            selectedTicket={selectedTicket}
+            onTicketSelect={handleTicketSelect}
+          />
         </div>
       </div>
     </div>

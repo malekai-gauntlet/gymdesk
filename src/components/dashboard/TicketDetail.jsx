@@ -108,10 +108,10 @@ export default function TicketDetail({ ticket, onClose }) {
       {/* Main content area */}
       <div className="flex flex-1 min-h-0 bg-gray-50 w-full">
         {/* Conversation thread and reply box container */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col max-h-screen">
           {/* Conversation thread */}
-          <div className="flex-1 overflow-y-auto p-4">
-            <div className="max-w-4xl">
+          <div className="flex-1 overflow-y-auto p-4" style={{ maxHeight: 'calc(100vh - 400px)' }}>
+            <div className="max-w-4xl mx-auto">
               {messages.map(message => (
                 <div key={message.id} className="flex space-x-3 pl-4 mb-6">
                   <div className="flex-shrink-0">
@@ -142,15 +142,15 @@ export default function TicketDetail({ ticket, onClose }) {
 
           {/* Reply box */}
           <div className="bg-white border-t border-gray-200 flex-shrink-0">
-            <div className="w-full">
+            <div className="max-w-4xl mx-auto w-full">
               <div className="flex items-center space-x-2 py-3 text-sm text-gray-600 px-4">
                 <span className="flex items-center">
                   <span className="text-gray-500">To</span>
                   <div className="ml-2 flex items-center bg-gray-100 rounded-full px-2 py-1">
                     <span className="h-5 w-5 rounded-full bg-gray-300 flex items-center justify-center text-xs text-gray-600 mr-1">
-                      {ticket.title?.[0]?.toUpperCase() || 'C'}
+                      {ticket.member_email?.[0]?.toUpperCase() || 'C'}
                     </span>
-                    <span>The Customer</span>
+                    <span>{ticket.member_email || 'Customer'}</span>
                   </div>
                 </span>
                 <button className="text-blue-600 text-sm hover:text-blue-700">
@@ -158,14 +158,14 @@ export default function TicketDetail({ ticket, onClose }) {
                 </button>
               </div>
               <div className="border-t border-gray-200">
-                <div className="flex flex-col min-h-[200px]">
+                <div className="flex flex-col">
                   <textarea
-                    rows={8}
-                    className="block w-full px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:outline-none text-sm resize-none border-0 flex-1"
+                    rows={6}
+                    className="block w-full px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:outline-none text-sm resize-none border-0"
                     placeholder="Type your reply..."
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
-                    style={{ minHeight: '200px' }}
+                    style={{ height: '150px' }}
                   />
                   <div className="flex items-center justify-between py-3 px-4 border-t border-gray-200">
                     <div className="flex items-center space-x-4">
@@ -217,10 +217,12 @@ export default function TicketDetail({ ticket, onClose }) {
                 <div className="mt-3">
                   <div className="flex items-center">
                     <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
-                      <span className="text-sm font-medium text-gray-600">C</span>
+                      <span className="text-sm font-medium text-gray-600">
+                        {ticket.member_email?.[0]?.toUpperCase() || 'C'}
+                      </span>
                     </div>
                     <div className="ml-3">
-                      <p className="text-sm font-medium text-gray-900">The Customer</p>
+                      <p className="text-sm font-medium text-gray-900">Customer</p>
                       <p className="text-sm text-gray-500">{ticket.member_email}</p>
                     </div>
                   </div>

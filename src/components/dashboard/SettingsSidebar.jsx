@@ -37,7 +37,7 @@ export default function SettingsSidebar({ onSectionChange, activeSection }) {
 
         <div className="border-t border-gray-200 my-2"></div>
 
-        {/* Account Button with Dropdown */}
+        {/* Account Section */}
         <div>
           <button 
             onClick={() => setIsAccountOpen(!isAccountOpen)}
@@ -52,7 +52,7 @@ export default function SettingsSidebar({ onSectionChange, activeSection }) {
             />
           </button>
           
-          {/* Dropdown Menu */}
+          {/* Account Dropdown */}
           <div className={`overflow-hidden transition-all duration-200 ease-in-out ${isAccountOpen ? 'max-h-48' : 'max-h-0'}`}>
             <div className="pl-10 py-1">
               <button 
@@ -99,10 +99,17 @@ export default function SettingsSidebar({ onSectionChange, activeSection }) {
           </div>
         </div>
 
-        <button className="w-full flex items-center px-3 py-2 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-50">
+        {/* Team Section (formerly People) */}
+        <button 
+          onClick={() => handleSectionClick('people-team-members')}
+          className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md hover:bg-gray-50
+            ${activeSection === 'people-team-members' ? 'bg-gray-100 text-gray-900' : 'text-gray-600'}`}
+        >
           <UsersIcon className="mr-3 h-5 w-5 text-gray-400" />
-          People
+          Team
         </button>
+
+        {/* Other buttons */}
         <button className="w-full flex items-center px-3 py-2 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-50">
           <ArrowsRightLeftIcon className="mr-3 h-5 w-5 text-gray-400" />
           Channels

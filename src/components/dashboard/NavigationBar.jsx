@@ -1,16 +1,14 @@
 import { HomeIcon, TicketIcon, UsersIcon, ChartBarIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
 
-const navigation = [
-  { name: 'Home', icon: HomeIcon, view: 'home' },
-  { name: 'Tickets', icon: TicketIcon, view: 'dashboard' },
+const navigationItems = [
+  { name: 'Dashboard', icon: HomeIcon, view: 'dashboard' },
   { name: 'Customers', icon: UsersIcon, view: 'customers' },
-  { name: 'Reports', icon: ChartBarIcon, view: 'reports' },
-  { name: 'Settings', icon: Cog6ToothIcon, view: 'settings' },
+  { name: 'Settings', icon: Cog6ToothIcon, view: 'settings' }
 ]
 
 export default function NavigationBar({ selectedView, onViewChange }) {
   return (
-    <div className="w-16 bg-[#1B1D21] flex flex-col items-center py-4">
+    <div className="w-16 min-w-[64px] flex-shrink-0 bg-[#1B1D21] flex flex-col items-center py-4">
       {/* Logo */}
       <div className="mb-8 flex items-center justify-center">
         <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor">
@@ -20,7 +18,7 @@ export default function NavigationBar({ selectedView, onViewChange }) {
 
       {/* Navigation Icons */}
       <nav className="space-y-4">
-        {navigation.map((item) => (
+        {navigationItems.map((item) => (
           <button
             key={item.name}
             onClick={() => onViewChange(item.view)}

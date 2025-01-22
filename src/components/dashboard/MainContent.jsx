@@ -5,6 +5,7 @@ import TicketDetail from './TicketDetail'
 import CustomerList from './CustomerList'
 import Settings from './Settings'
 import BillingContent from './BillingContent'
+import TeamMembers from './TeamMembers'
 
 export default function MainContent({ view, selectedTicket, onTicketSelect }) {
   const [tickets, setTickets] = useState([])
@@ -125,6 +126,8 @@ export default function MainContent({ view, selectedTicket, onTicketSelect }) {
         return <Settings />
       case 'customers':
         return <CustomerList />
+      case 'people-team-members':
+        return <TeamMembers />
       case selectedTicket:
         return <TicketDetail ticket={selectedTicket} onClose={() => onTicketSelect(null)} />
       default:

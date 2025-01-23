@@ -12,31 +12,37 @@ export default function InvitedUserSetup() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState(null)
 
-  // Get the token from URL parameters
-  const token = searchParams.get('token')
+  // Get the token_hash from URL parameters
+  const tokenHash = searchParams.get('token_hash')
+  const type = searchParams.get('type')
 
   useEffect(() => {
-    if (!token) {
+    if (!tokenHash || type !== 'invite') {
       setError('Invalid invitation link. Please contact your administrator.')
       return
     }
 
-    // Get user email from token
-    const getEmailFromToken = async () => {
+    // Verify the token hash
+    const verifyInvite = async () => {
       try {
-        const { data: { user }, error } = await supabase.auth.getUser(token)
+        const { data, error } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: 'invite'
+        })
+        
         if (error) throw error
-        if (user?.email) {
-          setEmail(user.email)
+        
+        if (data?.user?.email) {
+          setEmail(data.user.email)
         }
       } catch (error) {
-        console.error('Error getting user from token:', error)
+        console.error('Error verifying invite:', error)
         setError('Invalid or expired invitation link. Please contact your administrator.')
       }
     }
 
-    getEmailFromToken()
-  }, [token])
+    verifyInvite()
+  }, [tokenHash, type])
 
   const handleSetup = async (e) => {
     e.preventDefault()
@@ -55,13 +61,9 @@ export default function InvitedUserSetup() {
       setLoading(true)
       setError(null)
 
-      // Update user's password using the invite token
+      // Update user's password
       const { error: updateError } = await supabase.auth.updateUser({
         password: password
-      }, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
       })
 
       if (updateError) throw updateError

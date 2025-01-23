@@ -68,6 +68,19 @@ export default function InvitedUserSetup() {
 
       if (updateError) throw updateError
 
+      // Update last_sign_in_at in users table
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { error: lastSignInError } = await supabase
+          .from('users')
+          .update({ last_sign_in_at: new Date().toISOString() })
+          .eq('id', user.id)
+
+        if (lastSignInError) {
+          console.error('Error updating last_sign_in_at:', lastSignInError)
+        }
+      }
+
       toast.success('Account setup complete! You can now sign in.')
       navigate('/admin/dashboard')
     } catch (error) {

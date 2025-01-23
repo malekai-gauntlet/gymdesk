@@ -76,11 +76,21 @@ export default function Login({ isMemberPortal, isLightTheme }) {
 
       } else {
         // Handle sign in
-        const { error } = await supabase.auth.signInWithPassword({ 
+        const { data, error } = await supabase.auth.signInWithPassword({ 
           email, 
           password 
         })
         if (error) throw error
+
+        // Update last_sign_in_at in users table
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({ last_sign_in_at: new Date().toISOString() })
+          .eq('id', data.user.id)
+
+        if (updateError) {
+          console.error('Error updating last_sign_in_at:', updateError)
+        }
       }
     } catch (error) {
       setError(error.message)

@@ -41,15 +41,19 @@ export default function DashboardLayout() {
   return (
     <div className="h-screen flex bg-gray-100">
       <NavigationBar selectedView={selectedView} onViewChange={handleViewChange} />
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col h-screen overflow-hidden">
         <Header />
-        <div className="flex-1 flex">
-          {renderSidebar()}
-          <MainContent 
-            view={selectedSection || selectedView} 
-            selectedTicket={selectedTicket}
-            onTicketSelect={handleTicketSelect}
-          />
+        <div className="flex-1 flex overflow-hidden">
+          <div className="flex-shrink-0">
+            {renderSidebar()}
+          </div>
+          <div className="flex-1 overflow-auto">
+            <MainContent 
+              view={selectedSection || selectedView} 
+              selectedTicket={selectedTicket}
+              onTicketSelect={handleTicketSelect}
+            />
+          </div>
         </div>
       </div>
     </div>

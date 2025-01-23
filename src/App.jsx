@@ -7,6 +7,7 @@ import Login from './components/auth/Login'
 import DashboardLayout from './components/dashboard/DashboardLayout'
 import LandingPage from './components/LandingPage'
 import MemberPortal from './components/member/MemberPortal'
+import InvitedUserSetup from './components/auth/InvitedUserSetup'
 
 function ProtectedRoute({ children, redirectTo = "/" }) {
   const { user } = useAuth()
@@ -25,6 +26,7 @@ function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/admin/login" element={<Login />} />
+          <Route path="/admin/setup" element={<InvitedUserSetup />} />
           <Route 
             path="/admin/dashboard" 
             element={

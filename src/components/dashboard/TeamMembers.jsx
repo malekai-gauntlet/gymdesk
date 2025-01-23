@@ -1,10 +1,36 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { AdjustmentsHorizontalIcon, ChevronDownIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline'
 import CreateTeamMember from './CreateTeamMember'
+import { supabase } from '../../lib/supabaseClient'
 
 export default function TeamMembers() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [teamMembers, setTeamMembers] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchTeamMembers()
+  }, [])
+
+  const fetchTeamMembers = async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .in('role', ['admin', 'agent'])
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      setTeamMembers(data || [])
+    } catch (error) {
+      console.error('Error fetching team members:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   if (showCreateForm) {
     return <CreateTeamMember onClose={() => setShowCreateForm(false)} />
@@ -105,7 +131,7 @@ export default function TeamMembers() {
                 Team member
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Group
+                Role
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Product access
@@ -123,84 +149,77 @@ export default function TeamMembers() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {/* Test User */}
-            <tr>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <input type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="flex items-center">
-                  <div className="h-10 w-10 flex-shrink-0">
-                    <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-                      <span className="text-sm font-medium text-gray-600">TU</span>
-                    </div>
+            {loading ? (
+              <tr>
+                <td colSpan="7" className="px-6 py-4 text-center">
+                  <div className="flex justify-center">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
                   </div>
-                  <div className="ml-4">
-                    <div className="text-sm font-medium text-gray-900">Test User</div>
-                    <div className="text-sm text-gray-500">malekaimischke@gmail.com</div>
-                  </div>
-                </div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-900">Support</div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-900">Support, Guide</div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-900">Agent</div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                Never
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button className="text-gray-400 hover:text-gray-500">
-                  <EllipsisVerticalIcon className="h-5 w-5" />
-                </button>
-              </td>
-            </tr>
-
-            {/* Admin User */}
-            <tr>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <input type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="flex items-center">
-                  <div className="h-10 w-10 flex-shrink-0">
-                    <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-                      <span className="text-sm font-medium text-gray-600">MM</span>
-                    </div>
-                  </div>
-                  <div className="ml-4">
+                </td>
+              </tr>
+            ) : teamMembers.length === 0 ? (
+              <tr>
+                <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
+                  No team members found
+                </td>
+              </tr>
+            ) : (
+              teamMembers.map((member) => (
+                <tr key={member.id}>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <input type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <span className="text-sm font-medium text-gray-900">Malekai Mischke</span>
-                      <span className="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
-                        Account owner
-                      </span>
+                      <div className="h-10 w-10 flex-shrink-0">
+                        <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
+                          <span className="text-sm font-medium text-gray-600">
+                            {member.first_name?.[0]?.toUpperCase()}{member.last_name?.[0]?.toUpperCase()}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="ml-4">
+                        <div className="flex items-center">
+                          <span className="text-sm font-medium text-gray-900">
+                            {member.first_name} {member.last_name}
+                          </span>
+                          {member.is_owner && (
+                            <span className="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                              Account owner
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-500">{member.email}</div>
+                        {!member.last_sign_in_at && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                            Invitation pending
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-500">malekai@tonsser.com</div>
-                  </div>
-                </div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-900">Support</div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-900">Support, Guide, Explore, Talk, Chat</div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-900">Admin</div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                Jan 22, 2025
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button className="text-gray-400 hover:text-gray-500">
-                  <EllipsisVerticalIcon className="h-5 w-5" />
-                </button>
-              </td>
-            </tr>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{member.role}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      {member.role === 'admin' ? 'Support, Guide, Explore, Talk, Chat' : 'Support, Guide'}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{member.role}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {member.last_sign_in_at ? new Date(member.last_sign_in_at).toLocaleString() : 'Never'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button className="text-gray-400 hover:text-gray-500">
+                      <EllipsisVerticalIcon className="h-5 w-5" />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

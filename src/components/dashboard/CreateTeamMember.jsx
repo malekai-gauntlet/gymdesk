@@ -67,7 +67,14 @@ export default function CreateTeamMember({ onClose }) {
       if (error) throw error
 
       toast.success('Team member invited successfully! They will receive an email to set up their account.')
-      onClose()
+      
+      // Reset form to initial state
+      setFormData({
+        firstName: '',
+        lastName: '',
+        email: '',
+        role: 'agent'
+      })
     } catch (error) {
       console.error('Error inviting team member:', error)
       toast.error(error.message || 'Failed to invite team member')

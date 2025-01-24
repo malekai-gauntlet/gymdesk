@@ -172,10 +172,10 @@ const EditableCell = ({ value, onChange, type = "text" }) => {
 
   return (
     <div 
-      className="cursor-pointer group relative"
+      className="cursor-pointer group relative min-h-[1.5rem] min-w-[1rem]"
       onClick={handleClick}
     >
-      <span>{value}</span>
+      {value}
       <div className="absolute inset-0 border border-[#e12c4c]/0 group-hover:border-[#e12c4c]/20 rounded pointer-events-none transition-colors" />
     </div>
   )
@@ -424,9 +424,7 @@ const WorkoutLog = () => {
   const [workoutData, setWorkoutData] = useState([
     {
       id: 1,
-      muscleGroup: 'Pull',
       date: '12/15/2024',
-      gym: 'Fitness',
       exercise: 'Lat Pulldown',
       weight: '100 & 200',
       sets: '2',
@@ -436,9 +434,7 @@ const WorkoutLog = () => {
     },
     {
       id: 2,
-      muscleGroup: 'Pull',
       date: '12/17/2024',
-      gym: 'Blink',
       exercise: 'Chest Press',
       weight: '45 & 25',
       sets: '2',
@@ -448,9 +444,7 @@ const WorkoutLog = () => {
     },
     {
       id: 3,
-      muscleGroup: 'Push',
       date: '12/19/2024',
-      gym: 'Fitness',
       exercise: 'Bench Press',
       weight: '185',
       sets: '3',
@@ -464,8 +458,55 @@ const WorkoutLog = () => {
   const [recognition, setRecognition] = useState(null)
   const [isListening, setIsListening] = useState(false)
   const [currentTranscript, setCurrentTranscript] = useState('')
+  const [isProcessing, setIsProcessing] = useState(false)
+
+  // Add this function before parseTranscript
+  const cleanWorkoutData = (data) => {
+    // Helper function to capitalize first letter of each word
+    const capitalizeWords = (str) => {
+      return str?.split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+    };
+
+    // Helper function to capitalize only first letter of a sentence
+    const capitalizeSentence = (str) => {
+      return str?.split('. ')
+        .map(sentence => sentence.charAt(0).toUpperCase() + sentence.slice(1).toLowerCase())
+        .join('. ');
+    };
+
+    // Helper function to convert word numbers to digits
+    const wordToNumber = (str) => {
+      const numberWords = {
+        'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4',
+        'five': '5', 'six': '6', 'seven': '7', 'eight': '8', 'nine': '9',
+        'ten': '10', 'eleven': '11', 'twelve': '12', 'thirteen': '13',
+        'fourteen': '14', 'fifteen': '15', 'sixteen': '16', 'seventeen': '17',
+        'eighteen': '18', 'nineteen': '19', 'twenty': '20'
+      };
+      
+      return str?.toLowerCase().split(' ').map(word => 
+        numberWords[word] || word
+      ).join(' ');
+    };
+
+    return {
+      exercise: capitalizeWords(data.exercise || ''),
+      weight: data.weight ? wordToNumber(data.weight.toString()) : '',
+      sets: data.sets ? wordToNumber(data.sets.toString()) : '',
+      reps: data.reps ? wordToNumber(data.reps.toString()) : '',
+      bodyweight: data.bodyweight ? wordToNumber(data.bodyweight.toString()) : '',
+      notes: data.notes ? 
+        (data.notes.trim().endsWith('.') ? 
+          capitalizeSentence(data.notes) : 
+          capitalizeSentence(data.notes) + '.'
+        ) : ''
+    };
+  };
 
   const parseTranscript = async (transcript) => {
+    setIsProcessing(true)
     try {
       console.log('Starting OpenAI request with transcript:', transcript)
       
@@ -473,7 +514,7 @@ const WorkoutLog = () => {
         model: "gpt-4",
         messages: [{
           role: "system",
-          content: "You are a fitness tracking assistant. Parse the following workout description and extract the information in a JSON format with the following fields: muscle_group, exercise, weight, sets, reps, bodyweight (if mentioned), notes (any additional comments). Return null for any fields not mentioned. Return only the JSON object without any markdown formatting."
+          content: "You are a fitness tracking assistant. Parse the following workout description and extract the information in a JSON format with the following fields: exercise, weight, sets, reps, bodyweight (if mentioned), notes (any additional comments). Return null for any fields not mentioned. Return only the JSON object without any markdown formatting."
         }, {
           role: "user",
           content: transcript
@@ -490,14 +531,17 @@ const WorkoutLog = () => {
       const parsedData = JSON.parse(cleanContent)
       console.log('Parsed workout data:', parsedData)
 
-      const workoutEntry = createWorkoutEntry(parsedData)
+      // Clean and format the parsed data
+      const cleanedData = cleanWorkoutData(parsedData)
+      console.log('Cleaned workout data:', cleanedData)
+
+      const workoutEntry = createWorkoutEntry(cleanedData)
       console.log('Created workout entry:', workoutEntry)
 
       // Add new workout entry to the state
       const newWorkout = {
         id: workoutData.length + 1,
         date: new Date().toLocaleDateString(),
-        gym: 'Current Gym',
         ...workoutEntry
       }
       
@@ -508,7 +552,7 @@ const WorkoutLog = () => {
         duration: 5000
       })
       
-      return parsedData
+      return cleanedData
       
     } catch (error) {
       console.error('Error parsing workout data:', error)
@@ -516,7 +560,6 @@ const WorkoutLog = () => {
         duration: 5000
       })
       return {
-        muscle_group: null,
         exercise: null,
         weight: null,
         sets: null,
@@ -524,6 +567,8 @@ const WorkoutLog = () => {
         bodyweight: null,
         notes: null
       }
+    } finally {
+      setIsProcessing(false)
     }
   }
 
@@ -564,12 +609,11 @@ const WorkoutLog = () => {
       recognition.stop()
       // Make OpenAI call after stopping if we have a transcript
       if (currentTranscript) {
-        await parseTranscript(currentTranscript)
-      }
-      // Clear transcript after delay
-      setTimeout(() => {
+        // Clear transcript immediately before processing starts
+        const savedTranscript = currentTranscript
         setCurrentTranscript('')
-      }, 10000)
+        await parseTranscript(savedTranscript)
+      }
     } else {
       recognition.start()
     }
@@ -583,19 +627,18 @@ const WorkoutLog = () => {
     ))
   }
 
-  // Add this new function
+  // Update createWorkoutEntry function
   const createWorkoutEntry = (parsedData) => {
     console.log('Creating workout entry from:', parsedData)
     
     return {
-      muscleGroup: parsedData.muscle_group || 'Unknown',
+      date: new Date().toLocaleDateString(),
       exercise: parsedData.exercise || '',
       weight: parsedData.weight ? `${parsedData.weight}` : '',
       sets: parsedData.sets ? `${parsedData.sets}` : '',
       reps: parsedData.reps ? `${parsedData.reps}` : '',
       bodyweight: parsedData.bodyweight ? `${parsedData.bodyweight}` : '',
-      notes: parsedData.notes || '',
-      // We'll add date and ID in the next steps
+      notes: parsedData.notes || ''
     }
   }
 
@@ -632,16 +675,32 @@ const WorkoutLog = () => {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          {isListening && (
+          {currentTranscript && (
+            <div className="flex items-center gap-2 bg-white/5 px-4 py-2 rounded-lg border border-[#e12c4c]/20">
+              <div className="w-2 h-2 rounded-full bg-[#e12c4c] animate-pulse" />
+              <p className="text-sm text-gray-300">{currentTranscript}</p>
+            </div>
+          )}
+          {isListening && !currentTranscript && (
             <span className="text-sm text-gray-400">
-              Recording... {currentTranscript && '(Speaking)'}
+              Recording...
             </span>
+          )}
+          {isProcessing && (
+            <div className="flex items-center gap-2 bg-white/5 px-4 py-2 rounded-lg border border-[#e12c4c]/20">
+              <svg className="animate-spin h-4 w-4 text-[#e12c4c]" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <span className="text-sm text-gray-300">Processing workout...</span>
+            </div>
           )}
           <button
             onClick={handleMicrophoneClick}
+            disabled={isProcessing}
             className={`p-2.5 rounded-full transition-colors text-gray-400 hover:text-white group relative ${
               isListening ? 'bg-[#e12c4c]/20 text-[#e12c4c]' : 'bg-white/5 hover:bg-white/10'
-            }`}
+            } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
             title={isListening ? "Stop recording" : "Record workout"}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -654,25 +713,12 @@ const WorkoutLog = () => {
         </div>
       </div>
       
-      {/* Show current transcript while recording or for a moment after stopping */}
-      {currentTranscript && (
-        <div className="mb-6 p-4 bg-white/5 rounded-lg border border-[#e12c4c]/20">
-          <p className="text-sm text-gray-300">{currentTranscript}</p>
-        </div>
-      )}
-      
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-800 border border-gray-800 rounded-lg">
           <thead>
             <tr className="bg-white/5">
               <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider border-r border-gray-800">
-                Muscle Group
-              </th>
-              <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider border-r border-gray-800">
                 Date
-              </th>
-              <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider border-r border-gray-800">
-                Which Gym?
               </th>
               <th scope="col" className="px-3 py-3.5 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider border-r border-gray-800">
                 Exercise
@@ -697,22 +743,10 @@ const WorkoutLog = () => {
           <tbody className="divide-y divide-gray-800">
             {workoutData.map(workout => (
               <tr key={workout.id} className="hover:bg-white/5 group">
-                <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-white/90 border-r border-gray-800">
-                  <EditableCell 
-                    value={workout.muscleGroup} 
-                    onChange={(newValue) => handleCellChange(workout.id, 'muscleGroup', newValue)} 
-                  />
-                </td>
                 <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-300 border-r border-gray-800">
                   <EditableCell 
                     value={workout.date} 
                     onChange={(newValue) => handleCellChange(workout.id, 'date', newValue)} 
-                  />
-                </td>
-                <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-300 border-r border-gray-800">
-                  <EditableCell 
-                    value={workout.gym} 
-                    onChange={(newValue) => handleCellChange(workout.id, 'gym', newValue)} 
                   />
                 </td>
                 <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-300 border-r border-gray-800">

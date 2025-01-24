@@ -7,7 +7,7 @@ import Settings from './Settings'
 import BillingContent from './BillingContent'
 import TeamMembers from './TeamMembers'
 
-export default function MainContent({ view, selectedTicket, onTicketSelect }) {
+export default function MainContent({ view, selectedTicket, onTicketSelect, filteredTickets, selectedCategory }) {
   const [tickets, setTickets] = useState([])
   const [stats, setStats] = useState({
     openTickets: 0,
@@ -18,32 +18,54 @@ export default function MainContent({ view, selectedTicket, onTicketSelect }) {
   const [loading, setLoading] = useState(true)
   const [activeMenu, setActiveMenu] = useState(null)
 
+  // Update tickets when filtered tickets change
   useEffect(() => {
-    fetchTickets()
-    // Set up real-time subscription
-    const subscription = supabase
-      .channel('tickets-main-channel')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'tickets' },
-        () => {
-          fetchTickets() // Refetch tickets when any changes occur
-        }
-      )
-      .subscribe()
+    if (filteredTickets) {
+      setTickets(filteredTickets)
+    } else {
+      fetchTickets()  // If no filtered tickets, fetch all tickets
+    }
+  }, [filteredTickets])
 
-    // Close menu when clicking outside
-    const handleClickOutside = (event) => {
-      if (!event.target.closest('.ticket-menu')) {
-        setActiveMenu(null)
+  useEffect(() => {
+    if (!filteredTickets) {  // Only set up subscription if not showing filtered tickets
+      fetchTickets()
+      // Set up real-time subscription
+      const subscription = supabase
+        .channel('tickets-main-channel')
+        .on('postgres_changes', 
+          { event: '*', schema: 'public', table: 'tickets' },
+          () => {
+            fetchTickets() // Refetch tickets when any changes occur
+          }
+        )
+        .subscribe()
+
+      // Close menu when clicking outside
+      const handleClickOutside = (event) => {
+        if (!event.target.closest('.ticket-menu')) {
+          setActiveMenu(null)
+        }
+      }
+      document.addEventListener('click', handleClickOutside)
+
+      return () => {
+        subscription.unsubscribe()
+        document.removeEventListener('click', handleClickOutside)
       }
     }
-    document.addEventListener('click', handleClickOutside)
+  }, [filteredTickets])
 
-    return () => {
-      subscription.unsubscribe()
-      document.removeEventListener('click', handleClickOutside)
+  // Handle both filtered tickets and individual ticket selection
+  const handleTicketUpdate = (ticketData) => {
+    if (Array.isArray(ticketData)) {
+      // If we receive an array, it's filtered tickets
+      setTickets(ticketData)
+    } else {
+      // If we receive a single ticket, it's for viewing details
+      onTicketSelect(ticketData)
     }
-  }, [])
+  }
 
   const fetchTickets = async () => {
     try {
@@ -52,20 +74,26 @@ export default function MainContent({ view, selectedTicket, onTicketSelect }) {
         .select(`
           *,
           member:created_by (
-            email
+            email,
+            first_name,
+            last_name
           )
         `)
         .order('created_at', { ascending: false })
 
       if (error) throw error
 
-      // Transform the data to include member_email
-      const ticketsWithEmail = tickets.map(ticket => ({
+      // Transform the data to include member info
+      const ticketsWithMemberInfo = tickets.map(ticket => ({
         ...ticket,
-        member_email: ticket.member?.email
+        member_email: ticket.member?.email || 'No email provided',
+        first_name: ticket.member?.first_name,
+        last_name: ticket.member?.last_name
       }))
 
-      setTickets(ticketsWithEmail)
+      console.log('Tickets with member info:', ticketsWithMemberInfo) // Add this log to debug
+
+      setTickets(ticketsWithMemberInfo)
       
       // Update stats
       const stats = {
@@ -84,7 +112,7 @@ export default function MainContent({ view, selectedTicket, onTicketSelect }) {
 
   const handleEditTicket = (ticket) => {
     // Use the same function as clicking the ticket
-    onTicketSelect(ticket)
+    handleTicketUpdate(ticket)
     setActiveMenu(null)
   }
 
@@ -113,12 +141,26 @@ export default function MainContent({ view, selectedTicket, onTicketSelect }) {
   }
 
   const handleTicketClick = (ticket) => {
-    onTicketSelect(ticket)
+    handleTicketUpdate(ticket)
     setActiveMenu(null)
+  }
+
+  const capitalizeFirstLetter = (str) => {
+    // Special case for "in_progress"
+    if (str === 'in_progress') {
+      return 'In Progress';
+    }
+    return str.charAt(0).toUpperCase() + str.slice(1);
   }
 
   // Render different content based on view
   const renderContent = () => {
+    // If there's a selected ticket, show the ticket detail view
+    if (selectedTicket) {
+      return <TicketDetail ticket={selectedTicket} onClose={() => onTicketSelect(null)} />
+    }
+
+    // Otherwise handle other views
     switch (view) {
       case 'billing':
         return <BillingContent />
@@ -128,8 +170,6 @@ export default function MainContent({ view, selectedTicket, onTicketSelect }) {
         return <CustomerList />
       case 'people-team-members':
         return <TeamMembers />
-      case selectedTicket:
-        return <TicketDetail ticket={selectedTicket} onClose={() => onTicketSelect(null)} />
       default:
         return (
           <div className="p-6">
@@ -162,7 +202,7 @@ export default function MainContent({ view, selectedTicket, onTicketSelect }) {
             {/* Tickets Table */}
             <div className="bg-white rounded-lg shadow-sm">
               <div className="px-4 py-3 border-b border-gray-200">
-                <h2 className="text-lg font-medium">Tickets requiring your attention</h2>
+                <h2 className="text-lg font-medium">{selectedCategory || 'All Tickets'}</h2>
               </div>
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -210,9 +250,11 @@ export default function MainContent({ view, selectedTicket, onTicketSelect }) {
                           <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                             ticket.status === 'open' ? 'bg-green-100 text-green-800' :
                             ticket.status === 'closed' ? 'bg-gray-100 text-gray-800' :
-                            'bg-yellow-100 text-yellow-800'
+                            ticket.status === 'solved' ? 'bg-blue-100 text-blue-800' :
+                            ticket.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'
                           }`}>
-                            {ticket.status}
+                            {capitalizeFirstLetter(ticket.status)}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

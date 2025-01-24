@@ -1,6 +1,6 @@
 export default function MemberSidebar() {
   return (
-    <div className="w-64 flex-shrink-0 bg-white border-r border-gray-200 overflow-y-auto">
+    <div className="w-64 flex-shrink-0 bg-white border-r border-gray-200 overflow-y-auto h-screen">
       <div className="p-4">
         <h2 className="text-lg font-medium text-gray-900 mb-4">Members Lists</h2>
         

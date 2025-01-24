@@ -2,56 +2,69 @@ import { useState } from 'react'
 import NavigationBar from './NavigationBar'
 import TicketUpdates from './TicketUpdates'
 import MainContent from './MainContent'
-import Header from './Header'
 import MemberSidebar from './MemberSidebar'
 import SettingsSidebar from './SettingsSidebar'
 
 export default function DashboardLayout() {
   const [selectedView, setSelectedView] = useState('dashboard')
   const [selectedTicket, setSelectedTicket] = useState(null)
-  const [selectedSection, setSelectedSection] = useState(null)
-
-  const handleTicketSelect = (ticket) => {
-    setSelectedTicket(ticket)
-  }
-
-  const handleSectionChange = (section) => {
-    setSelectedSection(section)
-  }
+  const [filteredTickets, setFilteredTickets] = useState(null)
+  const [selectedCategory, setSelectedCategory] = useState('All Tickets')
+  const [activeSection, setActiveSection] = useState('settings')
 
   const handleViewChange = (view) => {
-    setSelectedView(view)
-    // Reset section when changing main views
-    if (view !== 'settings') {
-      setSelectedSection(null)
+    // For settings-related views, keep selectedView as 'settings'
+    if (['settings', 'billing', 'people-team-members'].includes(view)) {
+      setSelectedView('settings')
+      setActiveSection(view)
+    } else {
+      setSelectedView(view)
+      setActiveSection(null) // Reset activeSection when leaving settings
+    }
+    setSelectedTicket(null)
+  }
+
+  const handleTicketUpdate = (ticketData, categoryName) => {
+    if (Array.isArray(ticketData)) {
+      // If we receive an array, it's filtered tickets
+      setFilteredTickets(ticketData)
+      if (categoryName) {
+        setSelectedCategory(categoryName)
+      }
+    } else {
+      // If we receive a single ticket, it's for viewing details
+      setSelectedTicket(ticketData)
     }
   }
 
-  // Determine which sidebar to show
   const renderSidebar = () => {
-    if (selectedView === 'settings' || selectedSection) {
-      return <SettingsSidebar onSectionChange={handleSectionChange} activeSection={selectedSection} />
+    switch (selectedView) {
+      case 'dashboard':
+        return <TicketUpdates onTicketSelect={handleTicketUpdate} selectedTicketId={selectedTicket?.id} />
+      case 'customers':
+        return <MemberSidebar selectedView={selectedView} />
+      case 'settings':
+        return <SettingsSidebar onSectionChange={handleViewChange} activeSection={activeSection} />
+      default:
+        return null
     }
-    if (selectedView === 'customers') {
-      return <MemberSidebar />
-    }
-    return <TicketUpdates onTicketSelect={handleTicketSelect} selectedTicketId={selectedTicket?.id} />
   }
 
   return (
     <div className="h-screen flex bg-gray-100">
       <NavigationBar selectedView={selectedView} onViewChange={handleViewChange} />
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        <Header />
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-shrink-0">
             {renderSidebar()}
           </div>
           <div className="flex-1 overflow-auto">
             <MainContent 
-              view={selectedSection || selectedView} 
-              selectedTicket={selectedTicket}
-              onTicketSelect={handleTicketSelect}
+              view={selectedView === 'settings' ? activeSection : selectedView}
+              selectedTicket={selectedTicket} 
+              onTicketSelect={handleTicketUpdate}
+              filteredTickets={filteredTickets}
+              selectedCategory={selectedCategory}
             />
           </div>
         </div>

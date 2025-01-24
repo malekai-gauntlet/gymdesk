@@ -89,15 +89,11 @@ export default function CreateTeamMember({ onClose }) {
       <nav className="text-sm text-gray-600 mb-4">
         <ol className="list-none p-0 inline-flex">
           <li className="flex items-center">
-            <span>People</span>
+            <span>Settings</span>
             <span className="mx-2">›</span>
           </li>
           <li className="flex items-center">
             <span>Team</span>
-            <span className="mx-2">›</span>
-          </li>
-          <li className="flex items-center">
-            <span>Team members</span>
             <span className="mx-2">›</span>
           </li>
           <li className="text-gray-800">Create team member</li>

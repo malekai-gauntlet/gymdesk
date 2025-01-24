@@ -2,8 +2,18 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 
 export default function TicketUpdates({ onTicketSelect, selectedTicketId }) {
-  const [tickets, setTickets] = useState([])
+  const [allTickets, setAllTickets] = useState([]) // Keep track of all tickets
+  const [displayTickets, setDisplayTickets] = useState([]) // For filtered display
   const [loading, setLoading] = useState(true)
+  const [selectedCategory, setSelectedCategory] = useState('All tickets')
+  const [stats, setStats] = useState({
+    unsolvedTickets: 0,
+    unassignedTickets: 0,
+    allUnsolvedTickets: 0,
+    recentlyUpdatedTickets: 0,
+    pendingTickets: 0,
+    recentlySolvedTickets: 0
+  })
 
   useEffect(() => {
     fetchTickets()
@@ -13,39 +23,58 @@ export default function TicketUpdates({ onTicketSelect, selectedTicketId }) {
       .channel('tickets-channel')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'tickets' },
-        (payload) => {
-          if (payload.eventType === 'DELETE') {
-            setTickets(current => current.filter(t => t.id !== payload.old.id))
-          } else if (payload.eventType === 'INSERT') {
-            setTickets(current => [payload.new, ...current])
-          }
+        () => {
+          fetchTickets() // Refetch tickets when any changes occur
         }
       )
       .subscribe()
 
-    // Listen for ticket deletions
-    const handleTicketDeleted = (event) => {
-      const deletedTicketId = event.detail
-      setTickets(current => current.filter(t => t.id !== deletedTicketId))
-    }
-    window.addEventListener('ticket-deleted', handleTicketDeleted)
-
     return () => {
       subscription.unsubscribe()
-      window.removeEventListener('ticket-deleted', handleTicketDeleted)
     }
   }, [])
 
   async function fetchTickets() {
     try {
-      const { data, error } = await supabase
+      const { data: tickets, error } = await supabase
         .from('tickets')
-        .select('*')
+        .select(`
+          *,
+          member:created_by (
+            email,
+            first_name,
+            last_name
+          )
+        `)
         .order('created_at', { ascending: false })
-        .limit(10)
 
       if (error) throw error
-      setTickets(data)
+
+      // Transform the data to include member info
+      const ticketsWithMemberInfo = tickets.map(ticket => ({
+        ...ticket,
+        member_email: ticket.member?.email || 'No email provided',
+        first_name: ticket.member?.first_name,
+        last_name: ticket.member?.last_name
+      }))
+
+      // Calculate stats
+      const stats = {
+        unsolvedTickets: tickets.filter(t => t.status === 'open').length,
+        unassignedTickets: tickets.filter(t => !t.assigned_to).length,
+        allUnsolvedTickets: tickets.filter(t => t.status !== 'closed').length,
+        recentlyUpdatedTickets: tickets.filter(t => {
+          const lastWeek = new Date()
+          lastWeek.setDate(lastWeek.getDate() - 7)
+          return new Date(t.updated_at || t.created_at) > lastWeek
+        }).length,
+        pendingTickets: tickets.filter(t => t.status === 'pending').length,
+        recentlySolvedTickets: tickets.filter(t => t.status === 'closed').length
+      }
+
+      setStats(stats)
+      setAllTickets(ticketsWithMemberInfo) // Store all tickets with member info
+      setDisplayTickets(ticketsWithMemberInfo) // Initially show all tickets with member info
     } catch (error) {
       console.error('Error fetching tickets:', error)
     } finally {
@@ -53,50 +82,95 @@ export default function TicketUpdates({ onTicketSelect, selectedTicketId }) {
     }
   }
 
+  async function fetchFilteredTickets(status, categoryName) {
+    console.log('=== Fetching Filtered Tickets ===')
+    console.log('Filtering by status:', status)
+    try {
+      const { data: tickets, error } = await supabase
+        .from('tickets')
+        .select(`
+          *,
+          member:created_by (
+            email,
+            first_name,
+            last_name
+          )
+        `)
+        .eq('status', status)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      // Transform the data to include member info
+      const ticketsWithMemberInfo = tickets.map(ticket => ({
+        ...ticket,
+        member_email: ticket.member?.email || 'No email provided',
+        first_name: ticket.member?.first_name,
+        last_name: ticket.member?.last_name
+      }))
+
+      console.log('Filtered tickets received:', ticketsWithMemberInfo)
+      console.log('Number of tickets:', ticketsWithMemberInfo.length)
+      setDisplayTickets(ticketsWithMemberInfo) // Update display tickets with member info
+      onTicketSelect(ticketsWithMemberInfo, categoryName)  // Pass both tickets and category name
+    } catch (error) {
+      console.error('Error fetching filtered tickets:', error)
+    }
+  }
+
+  const ticketCategories = [
+    { name: 'All tickets', count: allTickets.length }, // Use allTickets for counts
+    { name: 'Open tickets', count: allTickets.filter(t => t.status === 'open').length },
+    { name: 'In progress tickets', count: allTickets.filter(t => t.status === 'in_progress').length },
+    { name: 'Solved tickets', count: allTickets.filter(t => t.status === 'solved').length },
+    { name: 'Closed tickets', count: allTickets.filter(t => t.status === 'closed').length }
+  ]
+
   return (
-    <div className="w-80 bg-white border-r border-gray-200 p-4 overflow-y-auto">
-      <h2 className="text-lg font-semibold mb-4">Recent Tickets</h2>
+    <div className="w-64 bg-white border-r border-gray-200 p-4 overflow-y-auto h-screen">
+      <h2 className="text-lg font-medium text-gray-900 mb-4">Ticket Types</h2>
       
       {loading ? (
         <div className="flex justify-center items-center h-32">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
         </div>
       ) : (
-        <div className="space-y-4">
-          {tickets.map(ticket => (
-            <div 
-              key={ticket.id} 
-              onClick={() => onTicketSelect(ticket)}
-              className={`p-3 rounded-lg transition-colors cursor-pointer
-                ${selectedTicketId === ticket.id 
-                  ? 'bg-indigo-50 hover:bg-indigo-100' 
-                  : 'bg-gray-50 hover:bg-gray-100'
+        <div className="space-y-1">
+          {ticketCategories.map((category, index) => (
+            <button
+              key={index}
+              onClick={() => {
+                if (category.name === 'All tickets') {
+                  setDisplayTickets(allTickets);
+                  onTicketSelect(allTickets, category.name);
+                  setSelectedCategory(category.name);
+                }
+                else if (category.name === 'Open tickets') {
+                  fetchFilteredTickets('open', category.name);
+                  setSelectedCategory(category.name);
+                }
+                else if (category.name === 'In progress tickets') {
+                  fetchFilteredTickets('in_progress', category.name);
+                  setSelectedCategory(category.name);
+                }
+                else if (category.name === 'Solved tickets') {
+                  fetchFilteredTickets('solved', category.name);
+                  setSelectedCategory(category.name);
+                }
+                else if (category.name === 'Closed tickets') {
+                  fetchFilteredTickets('closed', category.name);
+                  setSelectedCategory(category.name);
+                }
+              }}
+              className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md transition-colors
+                ${selectedCategory === category.name 
+                  ? 'bg-gray-100 text-gray-900' 
+                  : 'text-gray-600 hover:bg-gray-50'
                 }`}
             >
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-medium text-gray-900">{ticket.title}</h3>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Ticket #{ticket.id}
-                  </p>
-                </div>
-                <span className={`
-                  px-2 py-1 text-xs rounded-full
-                  ${ticket.priority === 'high' ? 'bg-red-100 text-red-800' :
-                    ticket.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-green-100 text-green-800'}
-                `}>
-                  {ticket.priority}
-                </span>
-              </div>
-              <p className="text-sm text-gray-600 mt-2 line-clamp-2">
-                {ticket.description}
-              </p>
-              <div className="mt-2 flex justify-between items-center text-xs text-gray-500">
-                <span>{new Date(ticket.created_at).toLocaleDateString()}</span>
-                <span className="capitalize">{ticket.status}</span>
-              </div>
-            </div>
+              <span>{category.name}</span>
+              <span className="text-gray-500">{category.count}</span>
+            </button>
           ))}
         </div>
       )}

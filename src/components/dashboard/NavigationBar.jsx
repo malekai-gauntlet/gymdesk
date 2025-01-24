@@ -1,4 +1,7 @@
-import { HomeIcon, TicketIcon, UsersIcon, ChartBarIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
+import { HomeIcon, TicketIcon, UsersIcon, ChartBarIcon, Cog6ToothIcon, BellIcon, UserCircleIcon } from '@heroicons/react/24/outline'
+import { useState } from 'react'
+import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../auth/AuthContext'
 
 const navigationItems = [
   { name: 'Dashboard', icon: HomeIcon, view: 'dashboard' },
@@ -7,6 +10,18 @@ const navigationItems = [
 ]
 
 export default function NavigationBar({ selectedView, onViewChange }) {
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const { user } = useAuth()
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut()
+      window.location.href = '/'
+    } catch (error) {
+      console.error('Error signing out:', error)
+    }
+  }
+
   return (
     <div className="w-16 min-w-[64px] flex-shrink-0 bg-[#1B1D21] flex flex-col items-center py-4">
       {/* Logo */}
@@ -30,6 +45,33 @@ export default function NavigationBar({ selectedView, onViewChange }) {
           </button>
         ))}
       </nav>
+
+      {/* Bottom Icons */}
+      <div className="mt-auto space-y-4">
+        <button className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-gray-700 transition-colors">
+          <BellIcon className="w-6 h-6 text-gray-300" />
+        </button>
+        <div className="relative">
+          <button 
+            onClick={() => setIsProfileOpen(!isProfileOpen)}
+            className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-gray-700 transition-colors"
+          >
+            <UserCircleIcon className="w-6 h-6 text-gray-300" />
+          </button>
+          
+          {/* Profile Dropdown */}
+          {isProfileOpen && (
+            <div className="absolute left-full ml-2 bottom-0 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
+              <button
+                onClick={handleSignOut}
+                className="block w-full px-4 py-2 text-sm text-gray-700 text-left hover:bg-gray-100"
+              >
+                Sign out
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 } 

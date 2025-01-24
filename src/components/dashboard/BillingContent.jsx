@@ -5,13 +5,13 @@ export default function BillingContent() {
     <div className="flex-1 p-8 bg-gray-50">
       {/* Breadcrumb */}
       <div className="mb-6 text-sm text-gray-600">
-        Account &gt; Billing &gt; Subscription
+        Settings &gt; Account
       </div>
 
       {/* Main Content */}
       <div className="space-y-6">
         {/* Trial Banner */}
-        <div className="bg-white p-4 rounded-lg shadow">
+        {/* <div className="bg-white p-4 rounded-lg shadow">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <div className="flex-shrink-0">
@@ -30,7 +30,7 @@ export default function BillingContent() {
               Extend trial
             </button>
           </div>
-        </div>
+        </div> */}
 
         {/* Current Subscription */}
         <div className="bg-white rounded-lg shadow">
@@ -38,7 +38,7 @@ export default function BillingContent() {
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-medium">Current subscription</h2>
               <div className="space-x-4">
-                <button className="text-blue-600 hover:text-blue-700">Compare plans</button>
+                <button className="text-blue-600 hover:text-blue-700">View plans</button>
                 <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
                   Buy your trial
                 </button>
@@ -67,7 +67,7 @@ export default function BillingContent() {
               </tbody>
               <tfoot>
                 <tr className="border-t border-gray-200">
-                  <td colSpan="3" className="py-4 font-medium">Estimated total cost</td>
+                  <td colSpan="3" className="py-4 font-medium">Total cost</td>
                   <td className="py-4 text-right font-medium">$0</td>
                 </tr>
               </tfoot>
@@ -96,7 +96,7 @@ export default function BillingContent() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow">
+        {/* <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-xl font-medium">Billing details</h2>
           </div>
@@ -105,7 +105,7 @@ export default function BillingContent() {
               Add billing details
             </button>
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   )

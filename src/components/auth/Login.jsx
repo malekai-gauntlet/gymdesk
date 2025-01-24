@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from './AuthContext'
+import { toast } from 'react-hot-toast'
 
 export default function Login({ isMemberPortal, isLightTheme }) {
   const navigate = useNavigate()
@@ -18,15 +19,19 @@ export default function Login({ isMemberPortal, isLightTheme }) {
   // Redirect if already logged in
   useEffect(() => {
     if (user) {
-      // Check user role and redirect accordingly
       const userRole = user.user_metadata?.role
-      if (userRole === 'member') {
+      // Only redirect if the user's role matches the portal type
+      if (isMemberPortal && userRole === 'member') {
         navigate('/member')
-      } else {
+      } else if (!isMemberPortal && userRole === 'agent') {
         navigate('/admin/dashboard')
+      } else {
+        // If roles don't match, sign out
+        supabase.auth.signOut()
+        setError('Please use the correct portal to sign in based on your role.')
       }
     }
-  }, [user, navigate])
+  }, [user, navigate, isMemberPortal])
 
   const handleAuth = async (e) => {
     e.preventDefault()
@@ -35,6 +40,11 @@ export default function Login({ isMemberPortal, isLightTheme }) {
       setLoading(true)
       
       if (isSignUp) {
+        // Only allow member signups through member portal
+        if (!isMemberPortal) {
+          throw new Error('Staff accounts can only be created through invitation')
+        }
+
         // Step 1: Sign up the user
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
           email,
@@ -43,10 +53,11 @@ export default function Login({ isMemberPortal, isLightTheme }) {
             data: {
               first_name: firstName,
               last_name: lastName,
-              role: isMemberPortal ? 'member' : 'agent'
+              role: 'member' // Force member role for signups
             }
           }
         })
+        
         if (signUpError) throw signUpError
         
         if (!authData?.user?.id) {
@@ -62,18 +73,29 @@ export default function Login({ isMemberPortal, isLightTheme }) {
               email: email,
               first_name: firstName,
               last_name: lastName,
-              role: isMemberPortal ? 'member' : 'agent'
+              role: 'member'
             }
           ])
           .select()
 
         if (profileError) {
           console.error('Profile creation error:', profileError)
-          // If profile creation fails, clean up the auth user
           await supabase.auth.signOut()
           throw new Error('Failed to create user profile. Please try again.')
         }
 
+        // Step 3: Auto sign in after successful signup
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        })
+
+        if (signInError) {
+          throw new Error('Account created successfully. Please sign in.')
+        }
+
+        // Navigate to member dashboard
+        navigate('/member')
       } else {
         // Handle sign in
         const { data, error } = await supabase.auth.signInWithPassword({ 
@@ -81,6 +103,16 @@ export default function Login({ isMemberPortal, isLightTheme }) {
           password 
         })
         if (error) throw error
+
+        // Verify user role matches portal type
+        const userRole = data.user.user_metadata?.role
+        if (isMemberPortal && userRole !== 'member') {
+          await supabase.auth.signOut()
+          throw new Error('This is the member portal. Please use the staff portal to sign in as staff.')
+        } else if (!isMemberPortal && userRole !== 'agent') {
+          await supabase.auth.signOut()
+          throw new Error('This is the staff portal. Please use the member portal to sign in as a member.')
+        }
 
         // Update last_sign_in_at in users table
         const { error: updateError } = await supabase

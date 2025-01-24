@@ -76,7 +76,6 @@ const UpcomingEvents = () => (
 const SupportForm = () => {
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
-  const [priority, setPriority] = useState('medium')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { user } = useAuth()
   
@@ -130,7 +129,7 @@ const SupportForm = () => {
       const ticketData = {
         title,
         description: message,
-        priority,
+        priority: 'medium',
         status: 'open',
         created_by,
         comments: [],
@@ -180,7 +179,6 @@ const SupportForm = () => {
       // Clear form
       setTitle('')
       setMessage('')
-      setPriority('medium')
     } catch (error) {
       console.error('Full Error Object:', error)
       toast.error('Failed to create support request. Please try again.')
@@ -203,17 +201,6 @@ const SupportForm = () => {
             onChange={(e) => setTitle(e.target.value)}
             required
           />
-        </div>
-        <div>
-          <select
-            value={priority}
-            onChange={(e) => setPriority(e.target.value)}
-            className="w-full rounded-lg border border-gray-600 bg-gray-600/50 px-3 py-2 text-white focus:border-[#e12c4c] focus:ring-[#e12c4c]"
-          >
-            <option value="low">Low Priority</option>
-            <option value="medium">Medium Priority</option>
-            <option value="high">High Priority</option>
-          </select>
         </div>
         <div>
           <textarea
@@ -249,7 +236,7 @@ export default function MemberPortal() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1a1b23] text-white p-8">
+    <div className="bg-[#1a1b23] text-white p-8 h-screen overflow-y-auto">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold">Welcome back, {user?.user_metadata?.first_name || 'Member'}</h1>

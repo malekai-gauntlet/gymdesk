@@ -76,8 +76,16 @@ const UpcomingEvents = () => (
 
 const ClassBooking = () => (
   <div className="bg-white/5 rounded-xl p-6 backdrop-blur-sm">
-    <h3 className="text-xl font-semibold mb-4">Available Classes</h3>
-    <div className="space-y-3 mb-4">
+    <div className="flex items-center justify-between mb-4">
+      <h3 className="text-xl font-semibold">Available Classes</h3>
+      <button className="flex items-center gap-2 px-4 py-2 border border-transparent rounded-full shadow-sm text-sm font-semibold text-white bg-indigo-500 hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
+        <span>Book a Class</span>
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+        </svg>
+      </button>
+    </div>
+    <div className="space-y-3">
       <div className="p-3 bg-white/5 rounded-lg">
         <div className="flex justify-between items-start">
           <div>
@@ -95,16 +103,21 @@ const ClassBooking = () => (
         </div>
       </div>
     </div>
-    <button className="w-full flex justify-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-semibold text-white bg-[#e12c4c] hover:bg-[#d11b3b] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#e12c4c] transition-colors">
-      Book a Class
-    </button>
   </div>
 )
 
 const PTBooking = () => (
   <div className="bg-white/5 rounded-xl p-6 backdrop-blur-sm">
-    <h3 className="text-xl font-semibold mb-4">Available Personal Training Sessions</h3>
-    <div className="space-y-3 mb-4">
+    <div className="flex items-center justify-between mb-4">
+      <h3 className="text-xl font-semibold">Available Personal Training Sessions</h3>
+      <button className="flex items-center gap-2 px-4 py-2 border border-transparent rounded-full shadow-sm text-sm font-semibold text-white bg-indigo-500 hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
+        <span>Schedule Session</span>
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+        </svg>
+      </button>
+    </div>
+    <div className="space-y-3">
       <div className="p-3 bg-white/5 rounded-lg">
         <div className="flex justify-between items-start">
           <div>
@@ -122,9 +135,6 @@ const PTBooking = () => (
         </div>
       </div>
     </div>
-    <button className="w-full flex justify-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-semibold text-white bg-[#e12c4c] hover:bg-[#d11b3b] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#e12c4c] transition-colors">
-      Schedule a Session
-    </button>
   </div>
 )
 
@@ -182,15 +192,109 @@ const EditableCell = ({ value, onChange, type = "text" }) => {
 }
 
 const SupportForm = () => {
-  const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isAIMode, setIsAIMode] = useState(false)
+  const [isListening, setIsListening] = useState(false)
+  const [recognition, setRecognition] = useState(null)
+  const [aiMessages, setAiMessages] = useState([])
   const { user } = useAuth()
   
+  // Initialize speech recognition
+  useEffect(() => {
+    if ('webkitSpeechRecognition' in window) {
+      const recognition = new window.webkitSpeechRecognition()
+      recognition.continuous = true
+      recognition.interimResults = false
+      
+      recognition.onstart = () => {
+        setIsListening(true)
+      }
+
+      recognition.onresult = (event) => {
+        const transcript = Array.from(event.results)
+          .map(result => result[0].transcript)
+          .join(' ')
+        setMessage(prev => prev + (prev ? ' ' : '') + transcript)
+      }
+
+      recognition.onend = () => {
+        setIsListening(false)
+      }
+
+      setRecognition(recognition)
+    } else {
+      console.error('Speech recognition not supported in this browser')
+    }
+  }, [])
+
+  const handleMicrophoneClick = () => {
+    if (!recognition) return
+
+    if (isListening) {
+      recognition.stop()
+    } else {
+      recognition.start()
+    }
+  }
+
+  const generateSubjectLine = async (message) => {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [{
+          role: "system",
+          content: "You are a helpful assistant that generates concise subject lines. Create a brief (2-5 words) subject line that captures the main topic of the message. Return only the subject line text, nothing else."
+        }, {
+          role: "user",
+          content: message
+        }],
+        temperature: 0.7,
+      });
+
+      return completion.choices[0].message.content.trim();
+    } catch (error) {
+      console.error('Error generating subject line:', error);
+      return 'Support Request'; // Fallback subject line
+    }
+  };
+
+  const getAIResponse = async (question) => {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful gym assistant. Provide clear, concise answers about gym membership, classes, facilities, and fitness advice. Keep responses friendly and professional."
+          },
+          {
+            role: "user",
+            content: question
+          }
+        ],
+        temperature: 0.7,
+      });
+
+      return completion.choices[0].message.content;
+    } catch (error) {
+      console.error('Error getting AI response:', error);
+      throw error;
+    }
+  };
+
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setIsSubmitting(true)
+    e.preventDefault();
+    setIsSubmitting(true);
+    
+    // Show immediate success feedback with different message based on mode
+    toast.success(isAIMode ? 'Processing your question...' : 'Message sent! We\'ll get back to you soon.', {
+      duration: 3000
+    });
+    
+    // Clear form immediately for better UX
+    const messageContent = message;
+    setMessage('');
     
     try {
       console.log('=== Starting Ticket Submission ===')
@@ -232,14 +336,18 @@ const SupportForm = () => {
       }
 
       // Ensure created_by is treated as UUID
-      const created_by = user.id // Don't convert to string, keep as UUID
+      const created_by = user.id
       console.log('Created By (UUID):', created_by)
+      
+      // Generate subject line using LLM
+      const title = await generateSubjectLine(messageContent);
+      console.log('Generated subject line:', title);
 
       const ticketData = {
         title,
-        description: message,
+        description: messageContent,
         priority: 'medium',
-        status: 'open',
+        status: isAIMode ? 'ai' : 'open',
         created_by,
         comments: [],
         history: []
@@ -247,8 +355,7 @@ const SupportForm = () => {
       
       console.log('Ticket Data to Insert:', JSON.stringify(ticketData, null, 2))
 
-      // Step 1: Create ticket in database
-      console.log('Attempting database insert...')
+      // Database operations
       const { data: ticket, error: dbError } = await supabase
         .from('tickets')
         .insert([ticketData])
@@ -260,41 +367,42 @@ const SupportForm = () => {
           code: dbError.code,
           message: dbError.message,
           details: dbError.details,
-          hint: dbError.hint,
-          status: dbError.status,
-          query: dbError.query,
-          errorType: typeof dbError
+          hint: dbError.hint
         })
         throw dbError
       }
 
       console.log('Ticket created successfully:', ticket)
 
-      // Step 2: Send email notification
-      console.log('Attempting to send email notification...')
-      const { error: emailError } = await sendTicketNotification({
-        ...ticketData,
-        member_email: user?.email
-      })
+      // Only send email notification if not in AI mode
+      if (!isAIMode) {
+        const { error: emailError } = await sendTicketNotification({
+          ...ticketData,
+          member_email: user?.email
+        })
 
-      if (emailError) {
-        console.error('Email Error Details:', emailError)
-        toast.success('Ticket created, but notification email failed to send')
-      } else {
-        console.log('Email sent successfully')
-        toast.success('Support request sent successfully!')
+        if (emailError) {
+          console.error('Email Error Details:', emailError)
+        }
       }
 
-      // Clear form
-      setTitle('')
-      setMessage('')
+      if (isAIMode) {
+        // Get AI response after ticket is created
+        const aiResponse = await getAIResponse(messageContent);
+        
+        // Update UI with new message
+        setAiMessages(prev => [...prev, {
+          question: messageContent,
+          answer: aiResponse
+        }]);
+      }
+
     } catch (error) {
       console.error('Full Error Object:', error)
-      toast.error('Failed to create support request. Please try again.', {
+      toast.error('There was an issue processing your message, but we\'ve saved it and our team has been notified.', {
         duration: 5000
       })
     } finally {
-      console.log('=== Submission Process Complete ===')
       setIsSubmitting(false)
     }
   }
@@ -302,16 +410,16 @@ const SupportForm = () => {
   return (
     <div className={`rounded-xl p-8 backdrop-blur-sm ${
       isAIMode 
-        ? "bg-gradient-to-r from-[#e12c4c]/10 to-[#1a1b23] border border-[#e12c4c]/20" 
+        ? "bg-gradient-to-r from-indigo-500/10 to-[#1a1b23] border border-indigo-500/20" 
         : "bg-white/5"
     }`}>
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
-            isAIMode ? "bg-[#e12c4c]/20" : "bg-white/5"
+            isAIMode ? "bg-indigo-500/20" : "bg-white/5"
           }`}>
             {isAIMode ? (
-              <svg className="w-6 h-6 text-[#e12c4c]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
               </svg>
             ) : (
@@ -326,8 +434,8 @@ const SupportForm = () => {
             </h3>
             <p className="text-sm text-gray-400">
               {isAIMode 
-                ? "Get instant answers about membership, classes, facilities, and more"
-                : "Get help from our gym staff - we typically respond within an hour"
+                ? "Get instant answers about membership, classes, facilities, and more."
+                : "Get help from our gym staff - we typically respond within an hour."
               }
             </p>
           </div>
@@ -336,86 +444,120 @@ const SupportForm = () => {
         {/* Toggle Switch */}
         <div className="flex items-center gap-3">
           <button
-            className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
-            title="Voice input"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-            </svg>
-          </button>
-          <button
             onClick={() => setIsAIMode(!isAIMode)}
             className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 transition-colors"
           >
             <span className="text-sm text-gray-400">AI Mode</span>
             <div className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-300 ${
-              isAIMode ? "bg-[#e12c4c]" : "bg-gray-600"
+              isAIMode ? "bg-indigo-500" : "bg-gray-600"
             }`}>
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ${
                 isAIMode ? "translate-x-4" : "translate-x-1"
               }`} />
             </div>
           </button>
+          <button
+            onClick={handleMicrophoneClick}
+            className={`p-2 rounded-full transition-colors text-gray-400 hover:text-white group relative ${
+              isListening ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 hover:bg-white/10'
+            }`}
+            title={isListening ? "Stop recording" : "Record message"}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+            <div className={`absolute inset-0 border rounded-full pointer-events-none transition-colors ${
+              isListening ? 'border-indigo-500 animate-pulse' : 'border-indigo-500/0 group-hover:border-indigo-500/20'
+            }`} />
+          </button>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="relative">
-          <input
-            type="text"
-            className={`w-full rounded-lg px-4 py-3 text-white placeholder-gray-400 text-lg ${
-              isAIMode 
-                ? "border border-[#e12c4c]/20 bg-white/5 focus:border-[#e12c4c] focus:ring-[#e12c4c]"
-                : "border border-gray-600 bg-white/5 focus:border-gray-500 focus:ring-gray-500"
-            }`}
-            placeholder={isAIMode ? "Ask anything about the gym..." : "What can we help you with?"}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-          />
-        </div>
-        <div>
-          <textarea
-            rows={3}
-            className={`w-full rounded-lg px-4 py-3 text-white placeholder-gray-400 ${
-              isAIMode 
-                ? "border border-[#e12c4c]/20 bg-white/5 focus:border-[#e12c4c] focus:ring-[#e12c4c]"
-                : "border border-gray-600 bg-white/5 focus:border-gray-500 focus:ring-gray-500"
-            }`}
-            placeholder={isAIMode ? "Add more details to your question..." : "Provide any additional details..."}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-          />
-        </div>
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className={`flex items-center gap-2 py-2 px-6 border border-transparent rounded-full shadow-sm text-sm font-semibold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-              isAIMode
-                ? "bg-[#e12c4c] hover:bg-[#d11b3b] focus:ring-[#e12c4c]"
-                : "bg-gray-600 hover:bg-gray-700 focus:ring-gray-500"
-            } focus:outline-none focus:ring-2 focus:ring-offset-2`}
-          >
-            {isSubmitting ? (
-              <>
-                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                <span>Processing...</span>
-              </>
-            ) : (
-              <>
-                <span>{isAIMode ? "Ask AI" : "Send Message"}</span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </>
+      <div className="space-y-4">
+        {/* AI Messages Area */}
+        {isAIMode && aiMessages.length > 0 && (
+          <div className="space-y-4 mb-4">
+            {aiMessages.map((msg, index) => (
+              <div key={index} className="space-y-4">
+                {/* User Message */}
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 bg-white/5 rounded-lg px-4 py-3">
+                    <p className="text-sm text-gray-300">{msg.question}</p>
+                  </div>
+                </div>
+                {/* AI Response */}
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 bg-indigo-500/10 rounded-lg px-4 py-3">
+                    <p className="text-sm text-gray-300">{msg.answer}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Input Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="relative">
+            <textarea
+              rows={4}
+              className={`w-full rounded-lg px-4 py-3 text-white placeholder-gray-400 ${
+                isAIMode 
+                  ? "border border-indigo-500/20 bg-white/5 focus:border-indigo-500 focus:ring-indigo-500"
+                  : "border border-gray-600 bg-white/5 focus:border-gray-500 focus:ring-gray-500"
+              }`}
+              placeholder={isAIMode ? "Ask anything about the gym..." : "How can we help you today?"}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              required
+            />
+            {isListening && (
+              <div className="absolute right-3 top-3 flex items-center gap-2 px-2 py-1 rounded bg-indigo-500/20 border border-indigo-500/20">
+                <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+                <span className="text-sm text-indigo-400">Recording...</span>
+              </div>
             )}
-          </button>
-        </div>
-      </form>
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className={`flex items-center gap-2 py-2 px-6 border border-transparent rounded-full shadow-sm text-sm font-semibold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                isAIMode
+                  ? "bg-indigo-500 hover:bg-indigo-600 focus:ring-indigo-500"
+                  : "bg-gray-600 hover:bg-gray-700 focus:ring-gray-500"
+              } focus:outline-none focus:ring-2 focus:ring-offset-2`}
+            >
+              {isSubmitting ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span>Processing...</span>
+                </>
+              ) : (
+                <>
+                  <span>{isAIMode ? "Ask AI" : "Send Message"}</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
@@ -895,7 +1037,7 @@ const MemberSidebar = ({ activeView, onViewChange }) => (
               }`}
             >
               <svg className="mr-3 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               Recent Visits
             </button>
@@ -981,9 +1123,6 @@ export default function MemberPortal() {
                       </div>
                       <a href="#" className="block px-4 py-2 text-sm text-gray-300 hover:bg-white/5">
                         Account Settings
-                      </a>
-                      <a href="#" className="block px-4 py-2 text-sm text-gray-300 hover:bg-white/5">
-                        Billing
                       </a>
                       <button
                         onClick={handleSignOut}

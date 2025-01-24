@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 
-export default function TicketUpdates({ onTicketSelect, selectedTicketId }) {
+export default function DashboardSidebar({ onTicketSelect, selectedTicketId }) {
   const [allTickets, setAllTickets] = useState([]) // Keep track of all tickets
   const [displayTickets, setDisplayTickets] = useState([]) // For filtered display
   const [loading, setLoading] = useState(true)
@@ -82,9 +82,9 @@ export default function TicketUpdates({ onTicketSelect, selectedTicketId }) {
     }
   }
 
-  async function fetchFilteredTickets(status, categoryName) {
-    console.log('=== Fetching Filtered Tickets ===')
-    console.log('Filtering by status:', status)
+  async function fetchFilteredTickets(value, categoryName, field = 'status') {
+    console.log(`=== Fetching Filtered Tickets ===`)
+    console.log(`Filtering by ${field}:`, value)
     try {
       const { data: tickets, error } = await supabase
         .from('tickets')
@@ -96,10 +96,15 @@ export default function TicketUpdates({ onTicketSelect, selectedTicketId }) {
             last_name
           )
         `)
-        .eq('status', status)
+        .eq(field, value)
         .order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        console.error('Supabase query error:', error)
+        throw error
+      }
+
+      console.log('Raw tickets from query:', tickets)
 
       // Transform the data to include member info
       const ticketsWithMemberInfo = tickets.map(ticket => ({
@@ -123,7 +128,8 @@ export default function TicketUpdates({ onTicketSelect, selectedTicketId }) {
     { name: 'Open tickets', count: allTickets.filter(t => t.status === 'open').length },
     { name: 'In progress tickets', count: allTickets.filter(t => t.status === 'in_progress').length },
     { name: 'Solved tickets', count: allTickets.filter(t => t.status === 'solved').length },
-    { name: 'Closed tickets', count: allTickets.filter(t => t.status === 'closed').length }
+    { name: 'Closed tickets', count: allTickets.filter(t => t.status === 'closed').length },
+    { name: 'AI tickets', count: allTickets.filter(t => t.status === 'ai').length }
   ]
 
   return (
@@ -159,6 +165,10 @@ export default function TicketUpdates({ onTicketSelect, selectedTicketId }) {
                 }
                 else if (category.name === 'Closed tickets') {
                   fetchFilteredTickets('closed', category.name);
+                  setSelectedCategory(category.name);
+                }
+                else if (category.name === 'AI tickets') {
+                  fetchFilteredTickets('ai', category.name);  // Remove the 'type' parameter since we're filtering by status
                   setSelectedCategory(category.name);
                 }
               }}

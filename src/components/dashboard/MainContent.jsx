@@ -11,8 +11,6 @@ export default function MainContent({ view, selectedTicket, onTicketSelect, filt
   const [tickets, setTickets] = useState([])
   const [stats, setStats] = useState({
     openTickets: 0,
-    groups: 0,
-    good: 0,
     solved: 0
   })
   const [loading, setLoading] = useState(true)
@@ -20,9 +18,12 @@ export default function MainContent({ view, selectedTicket, onTicketSelect, filt
 
   // Update tickets when filtered tickets change
   useEffect(() => {
+    console.log('Filtered tickets received in MainContent:', filteredTickets)
     if (filteredTickets) {
+      console.log('Setting tickets to filtered tickets:', filteredTickets)
       setTickets(filteredTickets)
     } else {
+      console.log('No filtered tickets, fetching all tickets')
       fetchTickets()  // If no filtered tickets, fetch all tickets
     }
   }, [filteredTickets])
@@ -95,12 +96,10 @@ export default function MainContent({ view, selectedTicket, onTicketSelect, filt
 
       setTickets(ticketsWithMemberInfo)
       
-      // Update stats
+      // Update stats - only keep openTickets and solved
       const stats = {
         openTickets: tickets.filter(t => t.status === 'open').length,
-        solved: tickets.filter(t => t.status === 'closed').length,
-        good: tickets.filter(t => t.priority === 'low').length,
-        groups: new Set(tickets.map(t => t.created_by)).size // Unique requesters
+        solved: tickets.filter(t => t.status === 'solved').length
       }
       setStats(stats)
     } catch (error) {
@@ -150,6 +149,10 @@ export default function MainContent({ view, selectedTicket, onTicketSelect, filt
     if (str === 'in_progress') {
       return 'In Progress';
     }
+    // Special case for "ai"
+    if (str === 'ai') {
+      return 'AI';
+    }
     return str.charAt(0).toUpperCase() + str.slice(1);
   }
 
@@ -187,10 +190,8 @@ export default function MainContent({ view, selectedTicket, onTicketSelect, filt
             {/* Stats */}
             <div className="grid grid-cols-4 gap-4 mb-6">
               {[
-                { label: 'Open Tickets', value: stats.openTickets },
-                { label: 'Groups', value: stats.groups },
-                { label: 'Good', value: stats.good },
-                { label: 'Solved', value: stats.solved }
+                { label: 'Open Tickets', value: tickets.filter(t => t.status === 'open').length },
+                { label: 'Solved', value: tickets.filter(t => t.status === 'solved').length }
               ].map((stat) => (
                 <div key={stat.label} className="bg-white p-4 rounded-lg shadow-sm">
                   <p className="text-sm text-gray-500">{stat.label}</p>

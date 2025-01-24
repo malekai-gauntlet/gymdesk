@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import NavigationBar from './NavigationBar'
-import TicketUpdates from './TicketUpdates'
+import DashboardSidebar from './DashboardSidebar'
 import MainContent from './MainContent'
 import MemberSidebar from './MemberSidebar'
 import SettingsSidebar from './SettingsSidebar'
@@ -40,7 +40,7 @@ export default function DashboardLayout() {
   const renderSidebar = () => {
     switch (selectedView) {
       case 'dashboard':
-        return <TicketUpdates onTicketSelect={handleTicketUpdate} selectedTicketId={selectedTicket?.id} />
+        return <DashboardSidebar onTicketSelect={handleTicketUpdate} selectedTicketId={selectedTicket?.id} />
       case 'customers':
         return <MemberSidebar selectedView={selectedView} />
       case 'settings':

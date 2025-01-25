@@ -41,9 +41,11 @@ export default function Login({ isMemberPortal, isLightTheme }) {
       
       if (isSignUp) {
         // Only allow member signups through member portal
+        /* Temporarily commented out to allow staff signups for evaluation
         if (!isMemberPortal) {
           throw new Error('Staff accounts can only be created through invitation')
         }
+        */
 
         // Step 1: Sign up the user
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
@@ -53,7 +55,7 @@ export default function Login({ isMemberPortal, isLightTheme }) {
             data: {
               first_name: firstName,
               last_name: lastName,
-              role: 'member' // Force member role for signups
+              role: isMemberPortal ? 'member' : 'agent' // Updated to allow agent role for staff portal
             }
           }
         })
@@ -73,7 +75,7 @@ export default function Login({ isMemberPortal, isLightTheme }) {
               email: email,
               first_name: firstName,
               last_name: lastName,
-              role: 'member'
+              role: isMemberPortal ? 'member' : 'agent'
             }
           ])
           .select()
@@ -94,8 +96,12 @@ export default function Login({ isMemberPortal, isLightTheme }) {
           throw new Error('Account created successfully. Please sign in.')
         }
 
-        // Navigate to member dashboard
-        navigate('/member')
+        // Navigate based on user role
+        if (isMemberPortal) {
+          navigate('/member')
+        } else {
+          navigate('/admin/dashboard')
+        }
       } else {
         // Handle sign in
         const { data, error } = await supabase.auth.signInWithPassword({ 

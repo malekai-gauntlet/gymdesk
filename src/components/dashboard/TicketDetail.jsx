@@ -4,8 +4,11 @@ import { supabase } from '../../lib/supabaseClient'
 import { toast } from 'react-hot-toast'
 import { sendTicketNotification } from '../../lib/supabaseClient'
 import EmojiPicker from 'emoji-picker-react'
+import { generateTicketResponse } from '../../lib/openaiClient'
+import { useAuth } from '../../components/auth/AuthContext'
 
 export default function TicketDetail({ ticket, onClose }) {
+  const { user } = useAuth()
   const [replyText, setReplyText] = useState('')
   const [messages, setMessages] = useState([])
   const [sending, setSending] = useState(false)
@@ -13,10 +16,18 @@ export default function TicketDetail({ ticket, onClose }) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showStatusMenu, setShowStatusMenu] = useState(false)
   const [showHeaderStatusMenu, setShowHeaderStatusMenu] = useState(false)
+  const [isGeneratingAIResponse, setIsGeneratingAIResponse] = useState(false)
+  const [agentData, setAgentData] = useState(null)
+  const [agents, setAgents] = useState([])
   const emojiButtonRef = useRef(null)
   const statusButtonRef = useRef(null)
   const headerStatusRef = useRef(null)
   const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 })
+  const [textareaHeight, setTextareaHeight] = useState(150) // Initial height in pixels
+  const textareaRef = useRef(null)
+  const [showBccMenu, setShowBccMenu] = useState(false)
+  const [bccRecipients, setBccRecipients] = useState([])
+  const bccButtonRef = useRef(null)
 
   // Debug log to see ticket data
   useEffect(() => {
@@ -25,15 +36,17 @@ export default function TicketDetail({ ticket, onClose }) {
 
   // Reset messages when ticket changes
   useEffect(() => {
-    setMessages([
-      {
-        id: ticket.id,
-        text: ticket.description,
-        sender: 'customer',
-        timestamp: ticket.created_at
-      }
-    ])
-  }, [ticket.id, ticket.description, ticket.created_at])
+    // Start with the initial ticket message
+    const initialMessage = {
+      id: ticket.id,
+      text: ticket.description,
+      sender: 'customer',
+      timestamp: ticket.created_at
+    }
+
+    // If history exists and has items, use it; otherwise use the initial message
+    setMessages(ticket.history?.length ? ticket.history : [initialMessage])
+  }, [ticket.id, ticket.description, ticket.created_at, ticket.history])
 
   // Calculate picker position when showing
   useEffect(() => {
@@ -56,21 +69,90 @@ export default function TicketDetail({ ticket, onClose }) {
     }
   }, [showEmojiPicker])
 
+  // Fetch agent data when component mounts
+  useEffect(() => {
+    const fetchAgentData = async () => {
+      if (user?.id) {
+        try {
+          const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', user.id)
+            .single()
+
+          if (error) throw error
+          setAgentData(data)
+          console.log('Agent data loaded:', data)
+        } catch (error) {
+          console.error('Error fetching agent data:', error)
+        }
+      }
+    }
+
+    fetchAgentData()
+  }, [user?.id])
+
+  // Add this useEffect after the other useEffects
+  useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, first_name, last_name, email')
+          .in('role', ['agent', 'admin'])
+
+        if (error) throw error
+        setAgents(data || [])
+      } catch (error) {
+        console.error('Error fetching agents:', error)
+        toast.error('Failed to load agents')
+      }
+    }
+
+    fetchAgents()
+  }, [])
+
   const handleSubmitReply = async (e) => {
     e.preventDefault()
     if (!replyText.trim()) return
     
     setSending(true)
+    console.log('Before clearing text - textarea height:', textareaHeight)
+    
+    // Create the new message object
+    const newMessage = {
+      id: Date.now(),
+      text: replyText,
+      sender: 'agent',
+      timestamp: new Date().toISOString()
+    }
+
+    // Update UI immediately
+    setMessages(prev => [...prev, newMessage])
+    setReplyText('')
+    
+    // Force reset the textarea height
+    const textarea = textareaRef.current
+    if (textarea) {
+      console.log('Resetting textarea height...')
+      textarea.style.height = '150px'
+      setTextareaHeight(150)
+      console.log('After reset - textarea height:', textarea.style.height)
+    }
+    
     try {
-      console.log('=== Starting Reply Submission ===')
-      console.log('Original ticket data:', ticket) // Log the original ticket data
-      
-      // Create the new message object
-      const newMessage = {
-        id: Date.now(),
-        text: replyText,
-        sender: 'agent',
-        timestamp: new Date().toISOString()
+      // Save message to ticket history in database
+      const { error: historyError } = await supabase
+        .from('tickets')
+        .update({ 
+          history: messages.concat(newMessage),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', ticket.id)
+
+      if (historyError) {
+        console.error('Error updating ticket history:', historyError)
+        throw new Error('Failed to save message history')
       }
 
       // Prepare ticket data with all required fields
@@ -80,13 +162,11 @@ export default function TicketDetail({ ticket, onClose }) {
         priority: ticket.priority,
         status: ticket.status,
         created_by: ticket.created_by,
-        member_email: ticket.member_email, // Make sure this exists in the ticket prop
+        member_email: ticket.member_email,
         type: 'reply',
-        reply_text: replyText
+        reply_text: newMessage.text,
+        bcc: bccRecipients.map(agent => agent.email) // Add BCC recipients
       }
-      
-      // Verify all required fields are present
-      console.log('Sending reply with data:', JSON.stringify(ticketData, null, 2))
       
       if (!ticketData.member_email) {
         throw new Error('Member email is missing from the ticket data')
@@ -101,15 +181,10 @@ export default function TicketDetail({ ticket, onClose }) {
       }
 
       console.log('Reply sent successfully:', data)
-
-      // Update messages in the UI
-      setMessages(prev => [...prev, newMessage])
-      
-      // Clear the reply text
-      setReplyText('')
-      
-      // Show success message
       toast.success('Reply sent successfully')
+      
+      // Clear BCC recipients after successful send
+      setBccRecipients([])
     } catch (error) {
       console.error('Error sending reply:', error)
       toast.error(error.message || 'Failed to send reply')
@@ -210,6 +285,124 @@ export default function TicketDetail({ ticket, onClose }) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showHeaderStatusMenu])
 
+  // Add useEffect for closing BCC menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showBccMenu && !event.target.closest('.bcc-menu-container')) {
+        setShowBccMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showBccMenu])
+
+  // Function to handle adding/removing BCC recipients
+  const toggleBccRecipient = (agent) => {
+    setBccRecipients(prev => {
+      const isSelected = prev.some(r => r.id === agent.id)
+      if (isSelected) {
+        return prev.filter(r => r.id !== agent.id)
+      } else {
+        return [...prev, agent]
+      }
+    })
+  }
+
+  const handleAIResponse = async () => {
+    try {
+      setIsGeneratingAIResponse(true)
+      console.log('Generating AI response for ticket:', {
+        title: ticket.title,
+        description: ticket.description,
+        memberName: `${ticket.first_name || ''} ${ticket.last_name || ''}`.trim() || 'Customer',
+        agentName: agentData ? `${agentData.first_name || ''} ${agentData.last_name || ''}`.trim() : 'Support Agent',
+        agentPosition: agentData?.role || 'Support Team'
+      })
+      
+      // Call the OpenAI function with member and agent info
+      const aiResponse = await generateTicketResponse({
+        ...ticket,
+        memberName: `${ticket.first_name || ''} ${ticket.last_name || ''}`.trim() || 'Customer',
+        agentName: agentData ? `${agentData.first_name || ''} ${agentData.last_name || ''}`.trim() : 'Support Agent',
+        agentPosition: agentData?.role || 'Support Team'
+      })
+      console.log('AI Response received:', aiResponse)
+      
+      // Set the AI response in the textarea
+      setReplyText(aiResponse)
+      toast.success('AI response generated')
+      
+    } catch (error) {
+      console.error('Error generating AI response:', error)
+      toast.error('Failed to generate AI response')
+    } finally {
+      setIsGeneratingAIResponse(false)
+    }
+  }
+
+  // Update the useEffect for textarea height adjustment
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (textarea) {
+      console.log('Text changed, current value length:', replyText.length)
+      
+      // Only adjust height if there's text
+      if (replyText.length > 0) {
+        // Reset height to auto to get the correct scrollHeight
+        textarea.style.height = '150px'
+        
+        // Calculate new height (capped at 2x original height)
+        const newHeight = Math.min(300, Math.max(150, textarea.scrollHeight))
+        console.log('Calculated new height:', newHeight)
+        setTextareaHeight(newHeight)
+        textarea.style.height = `${newHeight}px`
+      } else {
+        // If text is empty, reset to default height
+        console.log('Text is empty, resetting to default height')
+        textarea.style.height = '150px'
+        setTextareaHeight(150)
+      }
+    }
+  }, [replyText])
+
+  // Handle textarea auto-expand (keep this for direct user input)
+  const handleTextareaChange = (e) => {
+    setReplyText(e.target.value)
+  }
+
+  // Add this function to handle category selection while in ticket detail view
+  const handleCategorySelect = async (value, categoryName) => {
+    try {
+      const { data: tickets, error } = await supabase
+        .from('tickets')
+        .select(`
+          *,
+          member:created_by (
+            email,
+            first_name,
+            last_name
+          )
+        `)
+        .eq('status', value)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      // Transform the data to include member info
+      const ticketsWithMemberInfo = tickets.map(ticket => ({
+        ...ticket,
+        member_email: ticket.member?.email || 'No email provided',
+        first_name: ticket.member?.first_name,
+        last_name: ticket.member?.last_name
+      }))
+
+      // Close the ticket detail view and pass both the filtered tickets and category
+      onClose(ticketsWithMemberInfo, categoryName)
+    } catch (error) {
+      console.error('Error fetching filtered tickets:', error)
+    }
+  }
+
   return (
     <div className="flex flex-col h-screen w-full bg-gray-50">
       {/* Header */}
@@ -267,68 +460,152 @@ export default function TicketDetail({ ticket, onClose }) {
         {/* Conversation thread and reply box container */}
         <div className="flex-1 flex flex-col max-h-screen">
           {/* Conversation thread */}
-          <div className="flex-1 overflow-y-auto p-4" style={{ maxHeight: 'calc(100vh - 400px)' }}>
-            <div className="max-w-4xl mx-auto">
-              {messages.map(message => (
-                <div key={message.id} className="flex space-x-3 pl-4 mb-6">
-                  <div className="flex-shrink-0">
-                    <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
-                      <span className="text-sm font-medium text-gray-600">
-                        {message.sender === 'customer' 
-                          ? (ticket.first_name?.[0]?.toUpperCase() || 'M')
-                          : 'A'
-                        }
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center text-sm">
-                      <span className="font-medium text-gray-900">
-                        {message.sender === 'customer' 
-                          ? `${ticket.first_name || ''} ${ticket.last_name || ''}`.trim() || 'Member'
-                          : 'Agent'
-                        }
-                      </span>
-                      <span className="mx-2 text-gray-500">•</span>
-                      <span className="text-gray-500">
-                        {new Date(message.timestamp).toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="mt-1 text-sm text-gray-700">
-                      {message.text}
-                    </div>
+          <div className="flex-1 overflow-y-auto px-4 pt-6">
+            {messages.map(message => (
+              <div key={message.id} className="flex space-x-3 mb-6">
+                <div className="flex-shrink-0">
+                  <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
+                    <span className="text-sm font-medium text-gray-600">
+                      {message.sender === 'customer' 
+                        ? (ticket.first_name?.[0]?.toUpperCase() || 'M')
+                        : 'A'
+                      }
+                    </span>
                   </div>
                 </div>
-              ))}
-            </div>
+                <div className={`flex-1 min-w-0 pr-4 rounded-lg p-4 ${
+                  message.sender === 'customer' 
+                    ? 'bg-white' 
+                    : 'bg-blue-50'
+                }`}>
+                  <div className="flex items-center text-sm">
+                    <span className="font-medium text-gray-900">
+                      {message.sender === 'customer' 
+                        ? `${ticket.first_name || ''} ${ticket.last_name || ''}`.trim() || 'Member'
+                        : 'Agent'
+                      }
+                    </span>
+                    <span className="mx-2 text-gray-500">•</span>
+                    <span className="text-gray-500">
+                      {new Date(message.timestamp).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-sm text-gray-700 whitespace-pre-wrap">
+                    {message.text}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* Reply box */}
           <div className="bg-white border-t border-gray-200 flex-shrink-0">
-            <div className="max-w-4xl mx-auto w-full">
-              <div className="flex items-center space-x-2 py-3 text-sm text-gray-600 px-4">
-                <span className="flex items-center">
-                  <span className="text-gray-500">To</span>
-                  <div className="ml-2 flex items-center bg-gray-100 rounded-full px-2 py-1">
-                    <span className="h-5 w-5 rounded-full bg-gray-300 flex items-center justify-center text-xs text-gray-600 mr-1">
-                      {ticket.member_email?.[0]?.toUpperCase() || 'C'}
-                    </span>
-                    <span>{ticket.member_email || 'Customer'}</span>
+            <div className="w-full">
+              <div className="flex items-center justify-between py-3 text-sm text-gray-600 px-4">
+                <div className="flex items-center space-x-2">
+                  <span className="flex items-center">
+                    <span className="text-gray-500">To</span>
+                    <div className="ml-2 flex items-center bg-gray-100 rounded-full px-2 py-1">
+                      <span className="h-5 w-5 rounded-full bg-gray-300 flex items-center justify-center text-xs text-gray-600 mr-1">
+                        {ticket.member_email?.[0]?.toUpperCase() || 'C'}
+                      </span>
+                      <span>{ticket.member_email || 'Customer'}</span>
+                    </div>
+                  </span>
+                  <div className="relative bcc-menu-container flex items-center">
+                    <button 
+                      ref={bccButtonRef}
+                      onClick={() => setShowBccMenu(!showBccMenu)}
+                      className="text-blue-600 text-sm hover:text-blue-700 flex items-center"
+                    >
+                      BCC
+                      {bccRecipients.length > 1 && (
+                        <span className="ml-1 bg-blue-100 text-blue-600 text-xs rounded-full px-2">
+                          {bccRecipients.length}
+                        </span>
+                      )}
+                    </button>
+                    {bccRecipients.length === 1 && (
+                      <div className="ml-2 flex items-center bg-gray-100 rounded-full px-2 py-1">
+                        <span className="h-4 w-4 rounded-full bg-gray-300 flex items-center justify-center text-xs text-gray-600 mr-1">
+                          {bccRecipients[0].first_name[0]}
+                        </span>
+                        <span className="text-gray-700">{bccRecipients[0].email}</span>
+                        <button
+                          onClick={() => toggleBccRecipient(bccRecipients[0])}
+                          className="ml-1 text-gray-400 hover:text-gray-600"
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                    {showBccMenu && (
+                      <div className="absolute left-0 top-full mt-1 w-64 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50 max-h-48 overflow-y-auto">
+                        <div className="py-1">
+                          {agents.map((agent) => {
+                            const isSelected = bccRecipients.some(r => r.id === agent.id)
+                            return (
+                              <button
+                                key={agent.id}
+                                onClick={() => toggleBccRecipient(agent)}
+                                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center justify-between"
+                              >
+                                <span className="flex items-center">
+                                  <span className="h-6 w-6 rounded-full bg-gray-200 flex items-center justify-center text-sm text-gray-600 mr-2">
+                                    {agent.first_name[0]}
+                                  </span>
+                                  <span className="text-gray-900">{`${agent.first_name} ${agent.last_name}`}</span>
+                                </span>
+                                {isSelected && (
+                                  <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </span>
-                <button className="text-blue-600 text-sm hover:text-blue-700">
-                  BCC
+                </div>
+                {/* AI Response Button */}
+                <button
+                  type="button"
+                  onClick={handleAIResponse}
+                  disabled={isGeneratingAIResponse}
+                  className="px-3 py-1 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-300 rounded-md hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 inline-flex items-center"
+                >
+                  {isGeneratingAIResponse ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-purple-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      AI Response
+                    </>
+                  )}
                 </button>
               </div>
               <div className="border-t border-gray-200">
-                <div className="flex flex-col">
+                <div className="flex flex-col w-full">
                   <textarea
+                    ref={textareaRef}
                     rows={6}
                     className="block w-full px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:outline-none text-sm resize-none border-0"
                     placeholder="Type your reply..."
                     value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    style={{ height: '150px' }}
+                    onChange={handleTextareaChange}
+                    style={{ height: `${textareaHeight}px`, maxHeight: '300px', transition: 'height 0.1s ease-out' }}
                   />
                   <div className="flex items-center justify-between py-3 px-4 border-t border-gray-200">
                     <div className="flex items-center space-x-4">
@@ -405,6 +682,7 @@ export default function TicketDetail({ ticket, onClose }) {
                           </div>
                         )}
                       </div>
+
                       <button
                         type="submit"
                         onClick={handleSubmitReply}

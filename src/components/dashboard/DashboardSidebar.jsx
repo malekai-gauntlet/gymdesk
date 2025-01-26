@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 
-export default function DashboardSidebar({ onTicketSelect, selectedTicketId }) {
+export default function DashboardSidebar({ onTicketSelect, selectedTicketId, handleCategorySelect }) {
   const [allTickets, setAllTickets] = useState([]) // Keep track of all tickets
   const [displayTickets, setDisplayTickets] = useState([]) // For filtered display
   const [loading, setLoading] = useState(true)
@@ -40,6 +40,7 @@ export default function DashboardSidebar({ onTicketSelect, selectedTicketId }) {
         .from('tickets')
         .select(`
           *,
+          history,
           member:created_by (
             email,
             first_name,
@@ -90,6 +91,7 @@ export default function DashboardSidebar({ onTicketSelect, selectedTicketId }) {
         .from('tickets')
         .select(`
           *,
+          history,
           member:created_by (
             email,
             first_name,
@@ -117,7 +119,7 @@ export default function DashboardSidebar({ onTicketSelect, selectedTicketId }) {
       console.log('Filtered tickets received:', ticketsWithMemberInfo)
       console.log('Number of tickets:', ticketsWithMemberInfo.length)
       setDisplayTickets(ticketsWithMemberInfo) // Update display tickets with member info
-      onTicketSelect(ticketsWithMemberInfo, categoryName)  // Pass both tickets and category name
+      handleCategorySelect(ticketsWithMemberInfo, categoryName)  // Pass both tickets and category name
     } catch (error) {
       console.error('Error fetching filtered tickets:', error)
     }
@@ -148,7 +150,7 @@ export default function DashboardSidebar({ onTicketSelect, selectedTicketId }) {
               onClick={() => {
                 if (category.name === 'All tickets') {
                   setDisplayTickets(allTickets);
-                  onTicketSelect(allTickets, category.name);
+                  handleCategorySelect(allTickets, category.name);
                   setSelectedCategory(category.name);
                 }
                 else if (category.name === 'Open tickets') {
@@ -168,7 +170,7 @@ export default function DashboardSidebar({ onTicketSelect, selectedTicketId }) {
                   setSelectedCategory(category.name);
                 }
                 else if (category.name === 'AI tickets') {
-                  fetchFilteredTickets('ai', category.name);  // Remove the 'type' parameter since we're filtering by status
+                  fetchFilteredTickets('ai', category.name);
                   setSelectedCategory(category.name);
                 }
               }}

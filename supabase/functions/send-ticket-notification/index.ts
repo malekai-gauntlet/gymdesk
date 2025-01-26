@@ -12,6 +12,7 @@ interface TicketData {
   member_email: string
   type?: 'notification' | 'reply'  // New field to differentiate between notification and reply
   reply_text?: string             // New field for agent replies
+  bcc?: string[]  // Add BCC field to interface
 }
 
 // Validate required fields based on type
@@ -125,6 +126,7 @@ serve(async (req) => {
       body: JSON.stringify({
         from: 'onboarding@resend.dev',
         to: recipient,
+        bcc: ticket.bcc || [], // Add BCC recipients to email
         subject: emailContent.subject,
         html: `
           ${emailContent.html}

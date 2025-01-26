@@ -31,6 +31,7 @@ export default function DashboardLayout() {
       if (categoryName) {
         setSelectedCategory(categoryName)
       }
+      setSelectedTicket(null) // Clear selected ticket when showing filtered view
     } else {
       // If we receive a single ticket, it's for viewing details
       setSelectedTicket(ticketData)
@@ -40,7 +41,11 @@ export default function DashboardLayout() {
   const renderSidebar = () => {
     switch (selectedView) {
       case 'dashboard':
-        return <DashboardSidebar onTicketSelect={handleTicketUpdate} selectedTicketId={selectedTicket?.id} />
+        return <DashboardSidebar 
+          onTicketSelect={handleTicketUpdate} 
+          selectedTicketId={selectedTicket?.id}
+          handleCategorySelect={handleTicketUpdate} // Pass the handler to the sidebar
+        />
       case 'customers':
         return <MemberSidebar selectedView={selectedView} />
       case 'settings':

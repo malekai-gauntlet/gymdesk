@@ -6,8 +6,12 @@ import CustomerList from './CustomerList'
 import Settings from './Settings'
 import BillingContent from './BillingContent'
 import TeamMembers from './TeamMembers'
+import { toast } from 'react-hot-toast'
+import NewTicketModal from './NewTicketModal'
+import { useAuth } from '../../components/auth/AuthContext'
 
 export default function MainContent({ view, selectedTicket, onTicketSelect, filteredTickets, selectedCategory }) {
+  const { user } = useAuth()
   const [tickets, setTickets] = useState([])
   const [stats, setStats] = useState({
     openTickets: 0,
@@ -15,6 +19,10 @@ export default function MainContent({ view, selectedTicket, onTicketSelect, filt
   })
   const [loading, setLoading] = useState(true)
   const [activeMenu, setActiveMenu] = useState(null)
+  const [activeAssigneeMenu, setActiveAssigneeMenu] = useState(null)
+  const [showNewTicketModal, setShowNewTicketModal] = useState(false)
+
+  const [agents, setAgents] = useState([])
 
   // Update tickets when filtered tickets change
   useEffect(() => {
@@ -57,6 +65,24 @@ export default function MainContent({ view, selectedTicket, onTicketSelect, filt
     }
   }, [filteredTickets])
 
+  useEffect(() => {
+    const fetchAgents = async () => {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email')
+        .eq('role', 'agent')
+
+      if (error) {
+        console.error('Error fetching agents:', error)
+        return
+      }
+
+      setAgents(data || [])
+    }
+
+    fetchAgents()
+  }, [])
+
   // Handle both filtered tickets and individual ticket selection
   const handleTicketUpdate = (ticketData) => {
     if (Array.isArray(ticketData)) {
@@ -74,6 +100,7 @@ export default function MainContent({ view, selectedTicket, onTicketSelect, filt
         .from('tickets')
         .select(`
           *,
+          history,
           member:created_by (
             email,
             first_name,
@@ -92,7 +119,7 @@ export default function MainContent({ view, selectedTicket, onTicketSelect, filt
         last_name: ticket.member?.last_name
       }))
 
-      console.log('Tickets with member info:', ticketsWithMemberInfo) // Add this log to debug
+      console.log('Tickets with member info:', ticketsWithMemberInfo)
 
       setTickets(ticketsWithMemberInfo)
       
@@ -156,6 +183,65 @@ export default function MainContent({ view, selectedTicket, onTicketSelect, filt
     return str.charAt(0).toUpperCase() + str.slice(1);
   }
 
+  const handleAssignTicket = async (ticketId, agentId, agentName) => {
+    try {
+      const { error } = await supabase
+        .from('tickets')
+        .update({ assigned_to: agentId })
+        .eq('id', ticketId)
+
+      if (error) throw error
+
+      // Update local state with the agent's name for display
+      setTickets(tickets.map(ticket => 
+        ticket.id === ticketId 
+          ? { ...ticket, assigned_to: agentId, assignee_name: agentName }
+          : ticket
+      ))
+
+    } catch (error) {
+      console.error('Error assigning ticket:', error)
+      toast.error('Failed to assign ticket')
+    }
+  }
+
+  // Add this function to get agent name from ID
+  const getAgentName = (agentId) => {
+    const agent = agents.find(a => a.id === agentId)
+    return agent ? `${agent.first_name} ${agent.last_name}` : ''
+  }
+
+  const handleCreateTicket = async (formData) => {
+    try {
+      const { data: ticket, error } = await supabase
+        .from('tickets')
+        .insert([{
+          ...formData,
+          created_by: user.id,
+          status: 'open'
+        }])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Add the new ticket to the local state
+      const ticketWithMemberInfo = {
+        ...ticket,
+        member_email: user.email,
+        first_name: user.user_metadata?.first_name,
+        last_name: user.user_metadata?.last_name
+      }
+
+      setTickets(prev => [ticketWithMemberInfo, ...prev])
+      setShowNewTicketModal(false)
+      toast.success('Ticket created successfully')
+    } catch (error) {
+      console.error('Error creating ticket:', error)
+      toast.error('Failed to create ticket')
+    }
+  }
+
   // Render different content based on view
   const renderContent = () => {
     // If there's a selected ticket, show the ticket detail view
@@ -182,7 +268,10 @@ export default function MainContent({ view, selectedTicket, onTicketSelect, filt
                 <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
                 <p className="text-sm text-gray-500">Manage your tickets and view updates</p>
               </div>
-              <button className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
+              <button 
+                onClick={() => setShowNewTicketModal(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
                 New Ticket
               </button>
             </div>
@@ -219,6 +308,9 @@ export default function MainContent({ view, selectedTicket, onTicketSelect, filt
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Updated
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Assignee
                     </th>
                     <th className="relative px-6 py-3">
                       <span className="sr-only">Actions</span>
@@ -267,6 +359,46 @@ export default function MainContent({ view, selectedTicket, onTicketSelect, filt
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {new Date(ticket.created_at).toLocaleString()}
                         </td>
+                        <td 
+                          className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hover:bg-gray-100 cursor-pointer group relative"
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent row click
+                            setActiveAssigneeMenu(activeAssigneeMenu === ticket.id ? null : ticket.id)
+                          }}
+                        >
+                          <div className="flex items-center">
+                            <span>{ticket.assignee_name || getAgentName(ticket.assigned_to) || ''}</span>
+                            <svg 
+                              className="w-4 h-4 ml-1.5 text-gray-400 opacity-0 group-hover:opacity-100" 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                          {/* Assignee Menu */}
+                          {activeAssigneeMenu === ticket.id && (
+                            <div className="absolute left-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10">
+                              <div className="py-1" role="menu">
+                                {agents.map((agent) => (
+                                  <button
+                                    key={agent.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      const agentName = `${agent.first_name} ${agent.last_name}`
+                                      handleAssignTicket(ticket.id, agent.id, agentName)
+                                      setActiveAssigneeMenu(null)
+                                    }}
+                                    className="block w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left"
+                                  >
+                                    {`${agent.first_name} ${agent.last_name}`}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="relative ticket-menu">
                             <button
@@ -309,6 +441,13 @@ export default function MainContent({ view, selectedTicket, onTicketSelect, filt
                 </tbody>
               </table>
             </div>
+
+            <NewTicketModal
+              isOpen={showNewTicketModal}
+              onClose={() => setShowNewTicketModal(false)}
+              onSubmit={handleCreateTicket}
+              agents={agents}
+            />
           </div>
         )
     }
